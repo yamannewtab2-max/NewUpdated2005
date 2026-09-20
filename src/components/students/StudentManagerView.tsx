@@ -5,7 +5,10 @@ import { StudentModal } from './StudentModal';
 import { MahjaModal } from './MahjaModal';
 import { RoomModal } from './RoomModal';
 import { AddStudentsToRoomModal } from './AddStudentsToRoomModal';
-import { MoveStudentRoomModal } from './MoveStudentRoomModal';
+import { StudentProfileModal } from './StudentProfileModal';
+import { MahjaProfileModal } from './MahjaProfileModal';
+import { levelNumber, levelBadgeColor } from '../../utils/level';
+import { currentMonthKey } from '../../utils/months';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Button } from '../common/Button';
 import { EmptyState } from '../common/EmptyState';
@@ -17,7 +20,6 @@ import {
   Trash2,
   Building2,
   DoorOpen,
-  ArrowRightLeft,
   UserPlus,
   UserCheck,
   UserX,
@@ -25,7 +27,33 @@ import {
   Layers,
   Sparkles,
   CheckCircle2,
+  Clock,
+  ArrowLeft,
+  ChevronRight,
+  Info,
 } from 'lucide-react';
+
+/** Square icon-only action button — keeps card headers inside their box instead of overflowing. */
+const IconAction: React.FC<{
+  title: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: React.ReactNode;
+}> = ({ title, onClick, danger, children }) => (
+  <button
+    type="button"
+    title={title}
+    aria-label={title}
+    onClick={onClick}
+    className={`p-1.5 rounded-lg border bg-white shrink-0 transition-colors cursor-pointer ${
+      danger
+        ? 'border-red-200 text-red-600 hover:bg-red-50'
+        : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50'
+    }`}
+  >
+    {children}
+  </button>
+);
 
 export const StudentManagerView: React.FC = () => {
   const {
@@ -40,6 +68,8 @@ export const StudentManagerView: React.FC = () => {
     setSelectedGroupId,
     setActiveView,
     moveStudentToRoom,
+    monthlyPayments,
+    payments,
   } = useApp();
 
   // Primary view mode: 'hierarchy' | 'all-table' | 'unassigned'
@@ -49,6 +79,12 @@ export const StudentManagerView: React.FC = () => {
   const [selectedMahjaId, setSelectedMahjaId] = useState<string>(() => {
     return mahjas[0]?.id || '';
   });
+
+  // Mahja whose rooms are open; null = show the Mahja button directory
+  const [openMahjaId, setOpenMahjaId] = useState<string | null>(null);
+
+  // Room whose students are open; null = show the room button list
+  const [openRoomId, setOpenRoomId] = useState<string | null>(null);
 
   // Make sure selectedMahjaId is valid if mahjas change
   React.useEffect(() => {
@@ -60,6 +96,20 @@ export const StudentManagerView: React.FC = () => {
       setSelectedMahjaId('');
     }
   }, [mahjas, selectedMahjaId]);
+
+  // Leave the rooms view if the Mahja being shown was deleted
+  React.useEffect(() => {
+    if (openMahjaId && !mahjas.some((m) => m.id === openMahjaId)) {
+      setOpenMahjaId(null);
+    }
+  }, [mahjas, openMahjaId]);
+
+  // Leave the students view if the room being shown was deleted
+  React.useEffect(() => {
+    if (openRoomId && !rooms.some((r) => r.id === openRoomId)) {
+      setOpenRoomId(null);
+    }
+  }, [rooms, openRoomId]);
 
   // Search & filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,7 +123,8 @@ export const StudentManagerView: React.FC = () => {
   }>({});
   const [studentToEdit, setStudentToEdit] = useState<Student | null>(null);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
-  const [studentToMove, setStudentToMove] = useState<Student | null>(null);
+  const [profileStudentId, setProfileStudentId] = useState<string | null>(null);
+  const [profileMahjaId, setProfileMahjaId] = useState<string | null>(null);
 
   const [isMahjaModalOpen, setIsMahjaModalOpen] = useState(false);
   const [mahjaToEdit, setMahjaToEdit] = useState<Mahja | null>(null);
@@ -100,6 +151,11 @@ export const StudentManagerView: React.FC = () => {
     return rooms.filter((r) => r.mahjaId === selectedMahjaId);
   }, [rooms, selectedMahjaId]);
 
+  // Room currently opened for its student list
+  const activeRoom = useMemo(() => {
+    return rooms.find((r) => r.id === openRoomId) || null;
+  }, [rooms, openRoomId]);
+
   // Map of students per room
   const studentsByRoomMap = useMemo(() => {
     const map: Record<string, Student[]> = {};
@@ -119,6 +175,31 @@ export const StudentManagerView: React.FC = () => {
   const unassignedStudents = useMemo(() => {
     return students.filter((s) => !s.roomId);
   }, [students]);
+
+  // Students inside the opened room
+  const activeRoomStudents = useMemo(() => {
+    if (!activeRoom) return [];
+    return studentsByRoomMap[activeRoom.id] || [];
+  }, [activeRoom, studentsByRoomMap]);
+
+  /**
+   * Paid / late for the current month: the monthly ledger counts, and so does a
+   * paid record in any tracking list.
+   */
+  const studentMonthStatus = (studentId: string): 'paid' | 'partial' | 'unpaid' => {
+    const key = currentMonthKey();
+    const record = monthlyPayments.find((p) => p.studentId === studentId && p.month === key);
+    if (record?.status === 'paid') return 'paid';
+    if (payments.some((p) => p.studentId === studentId && p.status === 'paid')) return 'paid';
+    if (record?.status === 'partial') return 'partial';
+    return 'unpaid';
+  };
+
+  // Student whose profile is open (kept by id so edits stay in sync)
+  const profileStudent = useMemo(
+    () => students.find((s) => s.id === profileStudentId) || null,
+    [students, profileStudentId]
+  );
 
   // All students filtered for table view
   const filteredAllStudents = useMemo(() => {
@@ -150,22 +231,7 @@ export const StudentManagerView: React.FC = () => {
     };
   };
 
-  const getLevelBadgeColor = (level?: string) => {
-    switch (level) {
-      case 'Level 1':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'Level 2':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'Level 3':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Level 4':
-        return 'bg-purple-50 text-purple-700 border-purple-200';
-      case 'Level Unknown':
-        return 'bg-slate-100 text-slate-700 border-slate-300';
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-200';
-    }
-  };
+  const getLevelBadgeColor = levelBadgeColor;
 
   return (
     <div className="space-y-6">
@@ -336,8 +402,8 @@ export const StudentManagerView: React.FC = () => {
           {mahjas.length === 0 ? (
             <EmptyState
               icon={<Building2 className="w-8 h-8 text-indigo-500" />}
-              title="No Mahjas Created"
-              description="Create a Mahja (e.g. Mahja 26) to start organizing rooms and students in the hierarchy."
+              title={t.students.noMahjasTitle}
+              description={t.students.noMahjasDesc}
               actionLabel={t.students.newMahjaBtn}
               onAction={() => {
                 setMahjaToEdit(null);
@@ -346,58 +412,119 @@ export const StudentManagerView: React.FC = () => {
             />
           ) : (
             <>
-              {/* Mahja Tabs Navigation */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                {mahjas.map((m) => {
-                  const mRooms = rooms.filter((r) => r.mahjaId === m.id);
-                  const mStudentsCount = students.filter((s) => s.mahjaId === m.id).length;
-                  const isSelected = selectedMahjaId === m.id;
+              {/* Mahja button directory (replaced by the rooms view once a Mahja is opened) */}
+              {!openMahjaId && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                      {t.students.mahjasTitle}
+                    </h3>
+                    <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                      {mahjas.length}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">{t.students.mahjaDirectoryHint}</p>
+                </div>
 
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setSelectedMahjaId(m.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all whitespace-nowrap cursor-pointer ${
-                        isSelected
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-950 ring-1 ring-indigo-500 shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Building2
-                        className={`w-4 h-4 ${
-                          isSelected ? 'text-indigo-600' : 'text-slate-400'
-                        }`}
-                      />
-                      <span>{m.name}</span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                          isSelected
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {mRooms.length} rooms • {mStudentsCount}
-                      </span>
-                    </button>
-                  );
-                })}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {mahjas.map((m) => {
+                    const mRooms = rooms.filter((r) => r.mahjaId === m.id);
+                    const mStudentsCount = students.filter((s) => s.mahjaId === m.id).length;
 
+                    return (
+                      <div key={m.id} className="relative group">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMahjaId(m.id);
+                            setOpenMahjaId(m.id);
+                            setOpenRoomId(null);
+                          }}
+                          className="w-full h-full text-left bg-white rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 transition-all cursor-pointer hover:border-indigo-400 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                        >
+                        <div className="flex items-start justify-between gap-3 pr-10">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+                              <Building2 className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div dir="auto" className="text-sm font-bold text-slate-900 truncate">
+                                {m.name}
+                              </div>
+                              {m.description && (
+                                <div dir="auto" className="text-xs text-slate-500 truncate">
+                                  {m.description}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {mRooms.length} {t.students.roomsCountLabel}
+                          </span>
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            {mStudentsCount} {t.students.studentsCountLabel}
+                          </span>
+                          <span className="ml-auto text-[11px] font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {t.students.openMahjaLabel}
+                          </span>
+                        </div>
+                        </button>
+
+                        {/* Mahja profile (info) */}
+                        <button
+                          type="button"
+                          title={t.students.mahjaInfoBtn}
+                          aria-label={t.students.mahjaInfoBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProfileMahjaId(m.id);
+                          }}
+                          className="absolute top-3 right-3 p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-indigo-700 hover:border-indigo-300 hover:bg-indigo-50 transition-colors cursor-pointer"
+                        >
+                          <Info className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {/* New Mahja tile */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMahjaToEdit(null);
+                      setIsMahjaModalOpen(true);
+                    }}
+                    className="rounded-2xl border border-dashed border-slate-300 p-4 flex items-center justify-center gap-2 min-h-[104px] text-xs font-semibold text-slate-600 transition-colors cursor-pointer hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {t.students.newMahjaBtn}
+                  </button>
+                </div>
+              </div>
+              )}
+
+              {/* Back to the Mahja button directory */}
+              {activeMahja && openMahjaId && (
                 <button
                   type="button"
                   onClick={() => {
-                    setMahjaToEdit(null);
-                    setIsMahjaModalOpen(true);
+                    setOpenRoomId(null);
+                    setOpenMahjaId(null);
                   }}
-                  className="px-3 py-2 rounded-xl text-xs font-medium border border-dashed border-slate-300 text-slate-600 hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-700 cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  {t.students.newMahjaBtn}
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  {t.students.backToMahjas}
                 </button>
-              </div>
+              )}
 
               {/* Active Mahja Card Header */}
-              {activeMahja && (
+              {openMahjaId && activeMahja && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                     <div>
@@ -406,11 +533,11 @@ export const StudentManagerView: React.FC = () => {
                           <Building2 className="w-4 h-4" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-bold text-slate-900">
+                          <h3 dir="auto" className="text-lg font-bold text-slate-900">
                             {activeMahja.name}
                           </h3>
                           {activeMahja.description && (
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p dir="auto" className="text-xs text-slate-500 mt-0.5">
                               {activeMahja.description}
                             </p>
                           )}
@@ -418,45 +545,203 @@ export const StudentManagerView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
+                    {/* Icon-only actions so the header never overflows */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <IconAction
+                        title={t.students.newRoomBtn}
                         onClick={() => {
                           setTargetRoomMahjaId(activeMahja.id);
                           setRoomToEdit(null);
                           setIsRoomModalOpen(true);
                         }}
-                        leftIcon={<DoorOpen className="w-3.5 h-3.5 text-indigo-600" />}
                       >
-                        {t.students.newRoomBtn}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                        <DoorOpen className="w-4 h-4" />
+                      </IconAction>
+                      <IconAction
+                        title={t.students.editMahjaBtn}
                         onClick={() => {
                           setMahjaToEdit(activeMahja);
                           setIsMahjaModalOpen(true);
                         }}
-                        leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-500" />}
                       >
-                        {t.students.editMahjaBtn}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                        <Edit2 className="w-4 h-4" />
+                      </IconAction>
+                      <IconAction
+                        title={t.students.deleteMahjaBtn}
+                        danger
                         onClick={() => setMahjaToDelete(activeMahja)}
-                        className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
                       >
-                        {t.students.deleteMahjaBtn}
-                      </Button>
+                        <Trash2 className="w-4 h-4" />
+                      </IconAction>
                     </div>
                   </div>
 
                   {/* Rooms inside this Mahja */}
                   <div className="pt-5 space-y-5">
-                    {activeMahjaRooms.length === 0 ? (
+                    <div className="flex items-center gap-2">
+                      <DoorOpen className="w-4 h-4 text-indigo-600" />
+                      <h4 className="text-sm font-bold text-slate-800">
+                        {t.students.roomsHeading.replace('{mahja}', '').trim()}{' '}
+                        <span dir="auto">{activeMahja.name}</span>
+                      </h4>
+                      <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                        {activeMahjaRooms.length}
+                      </span>
+                    </div>
+                    {openRoomId && activeRoom ? (
+                      <div className="space-y-3">
+                        {/* Back to the room list */}
+                        <button
+                          type="button"
+                          onClick={() => setOpenRoomId(null)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-indigo-700 cursor-pointer"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                          {t.students.backToRooms}
+                        </button>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
+                          {/* Room Header */}
+                          <div className="p-3.5 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                <DoorOpen className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span dir="auto" className="text-sm font-bold text-slate-900">
+                                    {activeRoom.name}
+                                  </span>
+                                  <span className="text-[11px] font-mono px-2 py-0.2 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                                    {activeRoomStudents.length} {t.students.studentsCountLabel}
+                                  </span>
+                                </div>
+                                {activeRoom.description && (
+                                  <span dir="auto" className="text-xs text-slate-400 block mt-0.5">
+                                    {activeRoom.description}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Icon-only room actions */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <IconAction
+                                title={t.students.addExistingStudentsToRoomBtn}
+                                onClick={() =>
+                                  setAddExistingRoomTarget({
+                                    mahja: activeMahja,
+                                    room: activeRoom,
+                                  })
+                                }
+                              >
+                                <UserPlus className="w-4 h-4" />
+                              </IconAction>
+                              <IconAction
+                                title={t.students.addStudentBtn}
+                                onClick={() => {
+                                  setStudentToEdit(null);
+                                  setAddStudentPrefill({
+                                    mahjaId: activeMahja.id,
+                                    roomId: activeRoom.id,
+                                  });
+                                  setIsAddStudentOpen(true);
+                                }}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </IconAction>
+                              <IconAction
+                                title={t.students.editRoomBtn}
+                                onClick={() => {
+                                  setRoomToEdit(activeRoom);
+                                  setTargetRoomMahjaId(activeMahja.id);
+                                  setIsRoomModalOpen(true);
+                                }}
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </IconAction>
+                              <IconAction
+                                title={t.students.deleteRoomBtn}
+                                danger
+                                onClick={() => setRoomToDelete(activeRoom)}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </IconAction>
+                            </div>
+                          </div>
+
+                          {/* Students in this room */}
+                          <div className="p-3">
+                            {activeRoomStudents.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-slate-400">
+                                <p className="mb-2">{t.students.emptyRoomMessage}</p>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAddExistingRoomTarget({
+                                      mahja: activeMahja,
+                                      room: activeRoom,
+                                    })
+                                  }
+                                  className="text-indigo-600 hover:text-indigo-700 font-semibold cursor-pointer"
+                                >
+                                  {t.students.addExistingStudentsToRoomBtn}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {activeRoomStudents.map((student) => {
+                                  const status = studentMonthStatus(student.id);
+                                  return (
+                                    <button
+                                      key={student.id}
+                                      type="button"
+                                      onClick={() => setProfileStudentId(student.id)}
+                                      title={t.students.viewProfileBtn}
+                                      className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 min-w-0 text-start transition-colors cursor-pointer ${
+                                        status === 'paid'
+                                          ? 'border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50'
+                                          : status === 'partial'
+                                          ? 'border-amber-200 bg-amber-50/40 hover:bg-amber-50'
+                                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <span
+                                        className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                          status === 'paid'
+                                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                            : status === 'partial'
+                                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                            : 'border-slate-200 bg-slate-50 text-slate-600'
+                                        }`}
+                                      >
+                                        {status === 'paid' ? (
+                                          <CheckCircle2 className="w-3 h-3" />
+                                        ) : (
+                                          <Clock className="w-3 h-3" />
+                                        )}
+                                        {status === 'paid'
+                                          ? t.students.paidBadge
+                                          : status === 'partial'
+                                          ? t.students.partialBadge
+                                          : t.students.unpaidBadge}
+                                      </span>
+                                      <span className="flex-1" />
+                                      <span
+                                        dir="auto"
+                                        className="text-sm font-semibold text-slate-900 truncate max-w-[60%] text-right"
+                                      >
+                                        {student.name}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : activeMahjaRooms.length === 0 ? (
                       <div className="py-10 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
                         <DoorOpen className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                         <h4 className="text-sm font-semibold text-slate-700">
@@ -479,211 +764,52 @@ export const StudentManagerView: React.FC = () => {
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-2">
+                        {/* One button per room, names stacked one per line */}
                         {activeMahjaRooms.map((room) => {
                           const roomStudents = studentsByRoomMap[room.id] || [];
 
                           return (
-                            <div
+                            <button
                               key={room.id}
-                              className="rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden"
+                              type="button"
+                              onClick={() => setOpenRoomId(room.id)}
+                              className="group w-full text-left bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center gap-3 transition-all cursor-pointer hover:border-indigo-400 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                             >
-                              {/* Room Header */}
-                              <div className="p-3.5 bg-white border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                                    <DoorOpen className="w-4 h-4" />
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-bold text-slate-900">
-                                        {room.name}
-                                      </span>
-                                      <span className="text-[11px] font-mono px-2 py-0.2 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                                        {roomStudents.length} student{roomStudents.length !== 1 ? 's' : ''}
-                                      </span>
-                                    </div>
-                                    {room.description && (
-                                      <span className="text-xs text-slate-400 block mt-0.5">
-                                        {room.description}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Room Action Buttons */}
-                                <div className="flex items-center gap-1.5">
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() =>
-                                      setAddExistingRoomTarget({
-                                        mahja: activeMahja,
-                                        room,
-                                      })
-                                    }
-                                    leftIcon={<UserPlus className="w-3.5 h-3.5 text-indigo-600" />}
-                                  >
-                                    Add Existing Students
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setStudentToEdit(null);
-                                      setAddStudentPrefill({
-                                        mahjaId: activeMahja.id,
-                                        roomId: room.id,
-                                      });
-                                      setIsAddStudentOpen(true);
-                                    }}
-                                    leftIcon={<Plus className="w-3.5 h-3.5 text-slate-600" />}
-                                  >
-                                    New Student
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setRoomToEdit(room);
-                                      setTargetRoomMahjaId(activeMahja.id);
-                                      setIsRoomModalOpen(true);
-                                    }}
-                                    leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-500" />}
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setRoomToDelete(room)}
-                                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                                    leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                                  >
-                                    Delete
-                                  </Button>
-                                </div>
+                              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                                <DoorOpen className="w-4 h-4" />
                               </div>
-
-                              {/* Students in this room */}
-                              <div className="p-3">
-                                {roomStudents.length === 0 ? (
-                                  <div className="py-6 text-center text-xs text-slate-400">
-                                    <p className="mb-2">{t.students.emptyRoomMessage}</p>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setAddExistingRoomTarget({
-                                          mahja: activeMahja,
-                                          room,
-                                        })
-                                      }
-                                      className="text-indigo-600 hover:text-indigo-700 font-semibold cursor-pointer"
-                                    >
-                                      + Add existing students to this room
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                                    {roomStudents.map((student) => {
-                                      const trackingGroups = getStudentGroups(student.id);
-
-                                      return (
-                                        <div
-                                          key={student.id}
-                                          className="p-3 rounded-xl bg-white border border-slate-200/80 hover:border-slate-300 transition-all shadow-2xs group flex flex-col justify-between"
-                                        >
-                                          <div>
-                                            <div className="flex items-start justify-between gap-2">
-                                              <span className="text-sm font-semibold text-slate-900 leading-tight">
-                                                {student.name}
-                                              </span>
-                                              {student.level && (
-                                                <span
-                                                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${getLevelBadgeColor(
-                                                    student.level
-                                                  )}`}
-                                                >
-                                                  {student.level}
-                                                </span>
-                                              )}
-                                            </div>
-
-                                            {trackingGroups.length > 0 && (
-                                              <div className="mt-2 flex items-center gap-1 flex-wrap">
-                                                {trackingGroups.slice(0, 2).map((tg) => (
-                                                  <span
-                                                    key={tg.id}
-                                                    onClick={() => {
-                                                      setSelectedGroupId(tg.id);
-                                                      setActiveView('groups');
-                                                    }}
-                                                    className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 cursor-pointer"
-                                                  >
-                                                    {tg.name}
-                                                  </span>
-                                                ))}
-                                                {trackingGroups.length > 2 && (
-                                                  <span className="text-[10px] text-slate-400">
-                                                    +{trackingGroups.length - 2}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Student Actions */}
-                                          <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-slate-100">
-                                            <button
-                                              type="button"
-                                              onClick={() => setStudentToMove(student)}
-                                              className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1 cursor-pointer"
-                                            >
-                                              <ArrowRightLeft className="w-3 h-3" />
-                                              Move
-                                            </button>
-
-                                            <div className="flex items-center gap-1">
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setStudentToEdit(student);
-                                                  setIsAddStudentOpen(true);
-                                                }}
-                                                className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-                                                title="Edit Student"
-                                              >
-                                                <Edit2 className="w-3.5 h-3.5" />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  moveStudentToRoom(student.id, null, null);
-                                                }}
-                                                className="p-1 rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
-                                                title="Remove from room (Keep Unassigned)"
-                                              >
-                                                <UserX className="w-3.5 h-3.5" />
-                                              </button>
-                                              <button
-                                                type="button"
-                                                onClick={() => setStudentToDelete(student)}
-                                                className="p-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                                                title="Delete Student"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
+                              <div className="min-w-0 flex-1">
+                                <div dir="auto" className="text-sm font-bold text-slate-900 truncate">
+                                  {room.name}
+                                </div>
+                                {room.description && (
+                                  <div dir="auto" className="text-xs text-slate-500 truncate">
+                                    {room.description}
                                   </div>
                                 )}
                               </div>
-                            </div>
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
+                                {roomStudents.length} {t.students.studentsCountLabel}
+                              </span>
+                              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 shrink-0" />
+                            </button>
                           );
                         })}
+
+                        {/* New Room button row */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetRoomMahjaId(activeMahja.id);
+                            setRoomToEdit(null);
+                            setIsRoomModalOpen(true);
+                          }}
+                          className="w-full rounded-xl border border-dashed border-slate-300 px-4 py-3 flex items-center justify-center gap-2 text-xs font-semibold text-slate-600 transition-colors cursor-pointer hover:text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50/50"
+                        >
+                          <Plus className="w-4 h-4" />
+                          {t.students.newRoomBtn}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -742,113 +868,50 @@ export const StudentManagerView: React.FC = () => {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/70 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                      <th className="py-3 px-4">{t.students.tableHeaderStudent}</th>
-                      <th className="py-3 px-4">{t.students.tableHeaderLevel}</th>
-                      <th className="py-3 px-4">{t.students.tableHeaderMahjaRoom}</th>
-                      <th className="py-3 px-4">{t.students.tableHeaderGroups}</th>
-                      <th className="py-3 px-4 text-right">{t.students.tableHeaderActions}</th>
-                    </tr>
-                  </thead>
+
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {filteredAllStudents.map((student) => {
-                      const location = getLocationLabel(student);
-                      const trackingGroups = getStudentGroups(student.id);
+                      const status = studentMonthStatus(student.id);
 
                       return (
                         <tr
                           key={student.id}
-                          className="hover:bg-slate-50/80 transition-colors group"
+                          onClick={() => setProfileStudentId(student.id)}
+                          title={t.students.viewProfileBtn}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer"
                         >
-                          {/* Student Name */}
-                          <td className="py-3 px-4 font-semibold text-slate-900">
-                            {student.name}
-                          </td>
-
-                          {/* Level / Ranking */}
-                          <td className="py-3 px-4">
+                          {/* Paid this month? */}
+                          <td className="py-2.5 px-4 whitespace-nowrap w-[1%]">
                             <span
-                              className={`font-semibold text-[11px] px-2.5 py-0.5 rounded-full border inline-block ${getLevelBadgeColor(
-                                student.level
-                              )}`}
+                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                status === 'paid'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : status === 'partial'
+                                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                  : 'border-slate-200 bg-slate-50 text-slate-600'
+                              }`}
                             >
-                              {student.level || 'Level 1'}
+                              {status === 'paid' ? (
+                                <CheckCircle2 className="w-3 h-3" />
+                              ) : (
+                                <Clock className="w-3 h-3" />
+                              )}
+                              {status === 'paid'
+                                ? t.students.paidBadge
+                                : status === 'partial'
+                                ? t.students.partialBadge
+                                : t.students.unpaidBadge}
                             </span>
                           </td>
 
-                          {/* Mahja & Room */}
-                          <td className="py-3 px-4">
-                            {student.roomId ? (
-                              <div className="flex items-center gap-1.5 text-slate-800 font-medium">
-                                <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                                <span>{location.mahja}</span>
-                                <span className="text-slate-300">•</span>
-                                <DoorOpen className="w-3.5 h-3.5 text-slate-400" />
-                                <span>{location.room}</span>
-                              </div>
-                            ) : (
-                              <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-medium inline-block">
-                                Unassigned
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Tracking Groups */}
-                          <td className="py-3 px-4">
-                            {trackingGroups.length > 0 ? (
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {trackingGroups.map((tg) => (
-                                  <span
-                                    key={tg.id}
-                                    onClick={() => {
-                                      setSelectedGroupId(tg.id);
-                                      setActiveView('groups');
-                                    }}
-                                    className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium hover:bg-slate-200 cursor-pointer"
-                                  >
-                                    {tg.name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-[11px] text-slate-400">
-                                {t.students.notEnrolled}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setStudentToMove(student)}
-                                leftIcon={<ArrowRightLeft className="w-3.5 h-3.5" />}
-                              >
-                                Move
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setStudentToEdit(student);
-                                  setIsAddStudentOpen(true);
-                                }}
-                                leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-500" />}
-                              >
-                                Edit
-                              </Button>
-                              <button
-                                type="button"
-                                onClick={() => setStudentToDelete(student)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                                title="Delete student"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                          {/* Name */}
+                          <td className="py-2.5 px-4 min-w-0">
+                            <span
+                              dir="auto"
+                              className="block w-full text-sm font-semibold text-slate-900 truncate text-right"
+                            >
+                              {student.name}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -885,6 +948,8 @@ export const StudentManagerView: React.FC = () => {
         mahjaToEdit={mahjaToEdit}
         onCreated={(created) => {
           setSelectedMahjaId(created.id);
+          // return to the button directory so the new Mahja button is visible
+          setOpenMahjaId(null);
         }}
       />
 
@@ -909,12 +974,29 @@ export const StudentManagerView: React.FC = () => {
         />
       )}
 
-      {/* 5. Move Student Between Rooms Modal */}
-      {studentToMove && (
-        <MoveStudentRoomModal
-          isOpen={true}
-          onClose={() => setStudentToMove(null)}
-          student={studentToMove}
+      {/* Mahja profile: rooms, students, month payment status */}
+      {profileMahjaId && (
+        <MahjaProfileModal mahjaId={profileMahjaId} onClose={() => setProfileMahjaId(null)} />
+      )}
+
+      {/* Student profile: tracking groups + monthly payment history */}
+      {profileStudent && (
+        <StudentProfileModal
+          student={profileStudent}
+          onClose={() => setProfileStudentId(null)}
+          onEdit={(s) => {
+            setProfileStudentId(null);
+            setStudentToEdit(s);
+            setIsAddStudentOpen(true);
+          }}
+          onRemoveFromRoom={(s) => {
+            setProfileStudentId(null);
+            moveStudentToRoom(s.id, null, null);
+          }}
+          onDelete={(s) => {
+            setProfileStudentId(null);
+            setStudentToDelete(s);
+          }}
         />
       )}
 

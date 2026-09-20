@@ -57,6 +57,33 @@ export interface PaymentRecord {
   notes?: string;
 }
 
+/**
+ * One monthly obligation per student (every student owes this every month).
+ * `month` is 'YYYY-MM'; the record exists only once something was paid or a due was set.
+ */
+export interface MonthlyPayment {
+  id: string;
+  studentId: string;
+  month: string; // 'YYYY-MM'
+  amountDue: number;
+  amountPaid: number;
+  status: PaymentStatus;
+  paidAt?: string; // when the payment was recorded
+  notes?: string;
+}
+
+/**
+ * A plain recorded payment inside a list that has no students
+ * (e.g. "laundry" costs): amount + what it was for.
+ */
+export interface PaymentEntry {
+  id: string;
+  groupId: string;
+  amount: number;
+  note?: string;
+  createdAt: string;
+}
+
 export interface GroupStats {
   totalStudents: number;
   totalExpected: number;

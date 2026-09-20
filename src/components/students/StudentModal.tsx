@@ -120,6 +120,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Full Name */}
         <Input
+          dir="auto"
           label={t.students.nameLabel}
           placeholder={t.students.namePlaceholder}
           value={name}

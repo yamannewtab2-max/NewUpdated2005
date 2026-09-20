@@ -68,6 +68,7 @@ export const MahjaModal: React.FC<MahjaModalProps> = ({
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
+          dir="auto"
           label={t.students.mahjaNameLabel}
           placeholder={t.students.mahjaNamePlaceholder}
           value={name}
@@ -98,7 +99,7 @@ export const MahjaModal: React.FC<MahjaModalProps> = ({
             {t.students.cancel}
           </Button>
           <Button type="submit" variant="primary">
-            {mahjaToEdit ? t.students.update : t.students.save}
+            {mahjaToEdit ? t.students.updateMahjaBtn : t.students.saveMahjaBtn}
           </Button>
         </div>
       </form>

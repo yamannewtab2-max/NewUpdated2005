@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { GroupDetailView } from './GroupDetailView';
 import { GroupModal } from './GroupModal';
+import { PaymentRecorder } from './PaymentRecorder';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ProgressBar } from '../common/ProgressBar';
 import { Button } from '../common/Button';
@@ -33,15 +34,6 @@ export const GroupsView: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState<{ id: string; name: string } | null>(null);
 
-  // If a group is actively selected, show its deep detail view
-  if (selectedGroupId) {
-    return (
-      <GroupDetailView
-        groupId={selectedGroupId}
-      />
-    );
-  }
-
   // Filter groups
   const filteredGroups = useMemo(() => {
     if (!search.trim()) return groups;
@@ -66,6 +58,13 @@ export const GroupsView: React.FC = () => {
     }
     return map;
   }, [groups]);
+
+  // If a group is actively selected, show its deep detail view.
+  // (Must stay after every hook — an early return above the hooks below used to
+  // crash with "Rendered fewer hooks than expected".)
+  if (selectedGroupId) {
+    return <GroupDetailView groupId={selectedGroupId} />;
+  }
 
   return (
     <div className="space-y-6">
@@ -111,6 +110,8 @@ export const GroupsView: React.FC = () => {
           {rootGroups.map((rootGroup) => {
             const rootStats = getGroupStats(rootGroup.id, true);
             const childList = childrenMap.get(rootGroup.id) || [];
+            const isPaymentOnly =
+              (rootGroup.studentIds || []).length === 0 && childList.length === 0;
 
             return (
               <div
@@ -135,38 +136,46 @@ export const GroupsView: React.FC = () => {
                           Root
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {childList.length} {t.dashboard.subgroupsLabel} • {rootStats.totalStudents}{' '}
-                        {t.dashboard.studentsLabel}
-                      </p>
+                      {!isPaymentOnly && (
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {childList.length} {t.dashboard.subgroupsLabel} • {rootStats.totalStudents}{' '}
+                          {t.dashboard.studentsLabel}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Root Group Stats & CTA */}
                   <div className="flex items-center justify-between md:justify-end gap-4">
-                    <div className="text-right">
-                      <p className="text-xs text-slate-400 font-medium">{t.dashboard.collected}</p>
-                      <p className="text-sm font-bold font-mono text-slate-800">
-                        {formatMoney(rootStats.totalCollected)} / {formatMoney(rootStats.totalExpected)}
-                      </p>
-                    </div>
+                    {!isPaymentOnly && (
+                      <>
+                        <div className="text-right">
+                          <p className="text-xs text-slate-400 font-medium">{t.dashboard.collected}</p>
+                          <p className="text-sm font-bold font-mono text-slate-800 tabular-nums break-words">
+                            {formatMoney(rootStats.totalCollected)} / {formatMoney(rootStats.totalExpected)}
+                          </p>
+                        </div>
 
-                    <div className="w-24 sm:w-28">
-                      <ProgressBar progress={rootStats.progressPercentage} height="sm" />
-                      <span className="text-[10px] font-mono font-semibold text-slate-500 text-right block mt-0.5">
-                        {rootStats.progressPercentage}%
-                      </span>
-                    </div>
+                        <div className="w-24 sm:w-28">
+                          <ProgressBar progress={rootStats.progressPercentage} height="sm" />
+                          <span className="text-[10px] font-mono font-semibold text-slate-500 text-right block mt-0.5">
+                            {rootStats.progressPercentage}%
+                          </span>
+                        </div>
+                      </>
+                    )}
 
                     <div className="flex items-center gap-1 pl-2 border-l border-slate-200">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setSelectedGroupId(rootGroup.id)}
-                        rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
-                      >
-                        {t.dashboard.viewGroup}
-                      </Button>
+                      {!isPaymentOnly && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelectedGroupId(rootGroup.id)}
+                          rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
+                        >
+                          {t.dashboard.viewGroup}
+                        </Button>
+                      )}
                       <button
                         onClick={() =>
                           setGroupToDelete({ id: rootGroup.id, name: rootGroup.name })
@@ -179,6 +188,13 @@ export const GroupsView: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Payment-only list: amount + "+" and this month's payments */}
+                {isPaymentOnly && (
+                  <div className="p-3 sm:p-4" onClick={(e) => e.stopPropagation()}>
+                    <PaymentRecorder groupId={rootGroup.id} scope="month" />
+                  </div>
+                )}
 
                 {/* Subgroups Hierarchy List */}
                 {childList.length > 0 && (

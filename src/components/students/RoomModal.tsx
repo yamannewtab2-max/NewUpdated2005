@@ -80,12 +80,13 @@ export const RoomModal: React.FC<RoomModalProps> = ({
             <Building2 className="w-3.5 h-3.5 text-slate-400" />
             {t.students.mahjaLabel}
           </label>
-          <div className="text-sm font-medium text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+          <div dir="auto" className="text-sm font-medium text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
             {targetMahja?.name || 'Selected Mahja'}
           </div>
         </div>
 
         <Input
+          dir="auto"
           label={t.students.roomNameLabel}
           placeholder={t.students.roomNamePlaceholder}
           value={name}
@@ -114,7 +115,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
             {t.students.cancel}
           </Button>
           <Button type="submit" variant="primary">
-            {roomToEdit ? t.students.update : t.students.save}
+            {roomToEdit ? t.students.updateRoomBtn : t.students.saveRoomBtn}
           </Button>
         </div>
       </form>

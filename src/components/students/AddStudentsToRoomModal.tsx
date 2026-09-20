@@ -166,7 +166,7 @@ export const AddStudentsToRoomModal: React.FC<AddStudentsToRoomModalProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900 truncate">
+                        <span dir="auto" className="text-sm font-semibold text-slate-900 truncate">
                           {student.name}
                         </span>
                         {student.level && (

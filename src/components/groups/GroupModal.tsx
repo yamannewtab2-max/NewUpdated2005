@@ -4,6 +4,7 @@ import { TrackingGroup } from '../../types';
 import { Modal } from '../common/Modal';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
+import { TrackingListWizard } from './TrackingListWizard';
 import { Search, FolderTree, DollarSign, CheckSquare, Square, Users } from 'lucide-react';
 
 interface GroupModalProps {
@@ -121,6 +122,13 @@ export const GroupModal: React.FC<GroupModalProps> = ({
 
     onClose();
   };
+
+  // Creating a tracking list is a 4-step wizard (name → members → price → submit).
+  if (!groupToEdit) {
+    return (
+      <TrackingListWizard isOpen={isOpen} onClose={onClose} defaultParentId={defaultParentId} />
+    );
+  }
 
   return (
     <Modal
@@ -259,7 +267,7 @@ export const GroupModal: React.FC<GroupModalProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-xs font-semibold text-slate-800">{student.name}</p>
+                          <p dir="auto" className="text-xs font-semibold text-slate-800">{student.name}</p>
                           {student.level && (
                             <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
                               {student.level}

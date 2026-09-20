@@ -15,12 +15,21 @@ import {
   Search,
   ChevronRight,
   Layers,
+  CalendarDays,
+  TriangleAlert,
+  Wallet,
 } from 'lucide-react';
+import { currentMonthKey, daysLeftInMonth, monthKeyOf, monthLabel, nextResetDate } from '../../utils/months';
+import { summarizeMonth } from '../../utils/monthlyPayments';
 
 export const DashboardView: React.FC = () => {
   const {
     t,
+    language,
     groups,
+    students,
+    monthlyPayments,
+    paymentEntries,
     getGlobalStats,
     getGroupStats,
     setSelectedGroupId,
@@ -32,6 +41,18 @@ export const DashboardView: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const globalStats = getGlobalStats();
+
+  // Current-month payment status (rolls over automatically on the 1st)
+  const monthStats = useMemo(
+    () => summarizeMonth(students, monthlyPayments),
+    [students, monthlyPayments]
+  );
+  const currentKey = currentMonthKey();
+  const daysLeft = daysLeftInMonth(currentKey);
+  const resetLabel = new Date(nextResetDate()).toLocaleDateString(
+    language === 'id' ? 'id-ID' : 'en-GB',
+    { day: 'numeric', month: 'short', year: 'numeric' }
+  );
 
   // Filter groups
   const filteredGroups = useMemo(() => {
@@ -65,109 +86,97 @@ export const DashboardView: React.FC = () => {
         </Button>
       </div>
 
-      {/* Global Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Expected */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">
-              {t.dashboard.totalExpected}
-            </span>
-            <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600">
-              <DollarSign className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900">
-              {formatMoney(globalStats.totalExpected)}
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1">Across all active groups</p>
-          </div>
-        </div>
-
-        {/* Total Collected */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-emerald-600">
-              {t.dashboard.totalCollected}
-            </span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-700">
-              {formatMoney(globalStats.totalCollected)}
-            </span>
-            <p className="text-[11px] text-emerald-600/90 font-medium mt-1">
-              {globalStats.overallProgress}% collected
-            </p>
-          </div>
-        </div>
-
-        {/* Remaining Balance */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-amber-700">
-              {t.dashboard.remainingAmount}
-            </span>
-            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-800">
-              {formatMoney(globalStats.remainingAmount)}
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1">To be collected</p>
-          </div>
-        </div>
-
-        {/* Total Students & Groups */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-indigo-600">
-              {t.dashboard.totalStudents}
-            </span>
-            <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900">
-              {globalStats.totalStudents}
-            </span>
-            <p className="text-[11px] text-slate-400 mt-1">
-              in {globalStats.totalGroups} {t.dashboard.totalGroups.toLowerCase()}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Global Collection Progress Banner */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 text-white shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+      {/* Overview + This Month — two compact cards (was four tiles + a banner + four sub-tiles) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+        {/* Overall collection */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs min-w-0 overflow-hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
               <TrendingUp className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold tracking-tight">{t.dashboard.overallProgress}</h3>
-              <p className="text-xs text-slate-400">
-                {formatMoney(globalStats.totalCollected)} collected of{' '}
-                {formatMoney(globalStats.totalExpected)} expected
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-bold text-slate-900 truncate">
+                {t.dashboard.overallProgress}
+              </h3>
+              <p className="text-[11px] text-slate-500 font-mono tabular-nums truncate">
+                {formatMoney(globalStats.totalCollected)} / {formatMoney(globalStats.totalExpected)}
               </p>
             </div>
+            <span className="shrink-0 text-xl font-bold font-mono tabular-nums text-slate-900">
+              {globalStats.overallProgress}%
+            </span>
           </div>
-          <span className="text-xl font-bold font-mono text-indigo-400">
-            {globalStats.overallProgress}%
-          </span>
+
+          <div className="mt-3">
+            <ProgressBar progress={globalStats.overallProgress} height="md" />
+          </div>
+
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap text-[11px] min-w-0">
+            <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-100 min-w-0">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span className="truncate">{formatMoney(globalStats.remainingAmount)}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200">
+              <Users className="w-3 h-3" />
+              {globalStats.totalStudents}
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200">
+              <Layers className="w-3 h-3" />
+              {globalStats.totalGroups}
+            </span>
+          </div>
         </div>
-        <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 rounded-full transition-all duration-500"
-            style={{ width: `${globalStats.overallProgress}%` }}
-          />
+
+        {/* This month */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs min-w-0 overflow-hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shrink-0">
+              <CalendarDays className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-bold text-slate-900 truncate">
+                {t.dashboard.thisMonthTitle} · {monthLabel(currentKey, language)}
+              </h3>
+              <p className="text-[11px] text-slate-500 truncate">
+                {t.dashboard.dayCounterLabel
+                  .replace('{day}', String(monthStats.dayOfMonth))
+                  .replace('{total}', String(monthStats.daysInMonth))}
+                {' · '}
+                {daysLeft > 0
+                  ? t.dashboard.daysLeftLabel.replace('{days}', String(daysLeft))
+                  : t.dashboard.monthEndedLabel}
+              </p>
+            </div>
+            <span className="shrink-0 text-xl font-bold font-mono tabular-nums text-slate-900">
+              {monthStats.paidCount}
+              <span className="text-slate-400 text-sm">/{monthStats.totalStudents}</span>
+            </span>
+          </div>
+
+          <div className="mt-3">
+            <ProgressBar progress={monthStats.percentPaid} height="md" />
+          </div>
+
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap text-[11px] min-w-0">
+            <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 min-w-0">
+              <Wallet className="w-3 h-3 shrink-0" />
+              <span className="truncate font-mono tabular-nums">{formatMoney(monthStats.collected)}</span>
+            </span>
+            {monthStats.unpaidCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-100">
+                <TriangleAlert className="w-3 h-3" />
+                {monthStats.unpaidCount} {t.dashboard.unpaid.toLowerCase()}
+              </span>
+            )}
+            {monthStats.partialCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                {monthStats.partialCount} {t.dashboard.partial.toLowerCase()}
+              </span>
+            )}
+            <span className="ml-auto text-slate-400 shrink-0">
+              {t.dashboard.nextResetLabel.replace('{date}', resetLabel)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -211,92 +220,75 @@ export const DashboardView: React.FC = () => {
               const stats = getGroupStats(grp.id, true);
               const isSubgroup = grp.parentId !== null;
               const parent = isSubgroup ? groups.find((p) => p.id === grp.parentId) : null;
+              // Lists without students are payment logs: show this month's payments.
+              const isPaymentOnly = (grp.studentIds || []).length === 0;
+              const monthEntries = isPaymentOnly
+                ? paymentEntries.filter((e) => {
+                    if (e.groupId !== grp.id) return false;
+                    try {
+                      return monthKeyOf(new Date(e.createdAt)) === currentKey;
+                    } catch {
+                      return false;
+                    }
+                  })
+                : [];
+              const monthTotal = monthEntries.reduce((sum, e) => sum + e.amount, 0);
 
               return (
                 <div
                   key={grp.id}
                   onClick={() => handleOpenGroup(grp.id)}
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all duration-150 cursor-pointer flex flex-col justify-between group text-left"
+                  className="p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all duration-150 cursor-pointer group text-left min-w-0 overflow-hidden flex flex-col gap-3"
                 >
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
-                        {isSubgroup ? (
-                          <FolderTree className="w-4 h-4" />
-                        ) : (
-                          <Layers className="w-4 h-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
-                            {grp.name}
-                          </h4>
-                        </div>
-                        {parent && (
-                          <span className="text-[10px] text-slate-400 block truncate">
-                            under {parent.name}
+                  {/* Name + progress percentage */}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors shrink-0">
+                      {isSubgroup ? <FolderTree className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4
+                        dir="auto"
+                        className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate"
+                      >
+                        {grp.name}
+                      </h4>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {isPaymentOnly
+                          ? `${monthLabel(currentKey, language)} · ${monthEntries.length} ${t.groups.recordedPayments.toLowerCase()}`
+                          : `${stats.totalStudents} ${t.dashboard.studentsLabel}${
+                              grp.paymentAmount > 0 ? ` · ${formatMoney(grp.paymentAmount)}` : ''
+                            }${parent ? ` · ${parent.name}` : ''}`}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 font-bold font-mono tabular-nums ${
+                        isPaymentOnly ? 'text-sm text-emerald-700' : 'text-sm text-slate-900'
+                      }`}
+                    >
+                      {isPaymentOnly ? formatMoney(monthTotal) : `${stats.progressPercentage}%`}
+                    </span>
+                  </div>
+
+                  {!isPaymentOnly && (
+                    <>
+                      <ProgressBar progress={stats.progressPercentage} height="sm" />
+
+                      <div className="flex items-center justify-between gap-2 text-[11px] min-w-0">
+                        <span className="min-w-0 truncate font-mono tabular-nums">
+                          <span className="font-bold text-emerald-700">
+                            {formatMoney(stats.totalCollected)}
+                          </span>
+                          <span className="text-slate-400"> / {formatMoney(stats.totalExpected)}</span>
+                        </span>
+                        {stats.unpaidCount > 0 && (
+                          <span className="shrink-0 inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-100">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            {stats.unpaidCount} {t.dashboard.unpaid.toLowerCase()}
                           </span>
                         )}
-                        <p className="text-xs text-slate-500 font-mono mt-0.5">
-                          {stats.totalStudents} {t.dashboard.studentsLabel} • Rate:{' '}
-                          {formatMoney(grp.paymentAmount)}
-                        </p>
                       </div>
-                    </div>
-
-                    <div className="p-1 rounded-lg text-slate-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all">
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  {/* Financial Details: Expected, Collected, Remaining */}
-                  <div className="space-y-3 pt-3 border-t border-slate-100">
-                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                      <div className="p-2 rounded-lg bg-slate-50">
-                        <span className="text-[10px] text-slate-400 font-medium block">
-                          {t.dashboard.expected}
-                        </span>
-                        <span className="font-mono font-bold text-slate-800 text-[11px] sm:text-xs">
-                          {formatMoney(stats.totalExpected)}
-                        </span>
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-emerald-50/60">
-                        <span className="text-[10px] text-emerald-700 font-semibold block">
-                          {t.dashboard.collected}
-                        </span>
-                        <span className="font-mono font-bold text-emerald-700 text-[11px] sm:text-xs">
-                          {formatMoney(stats.totalCollected)}
-                        </span>
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-amber-50/60">
-                        <span className="text-[10px] text-amber-800 font-semibold block">
-                          {t.dashboard.remaining}
-                        </span>
-                        <span className="font-mono font-bold text-amber-900 text-[11px] sm:text-xs">
-                          {formatMoney(stats.remainingAmount)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Progress Bar & Status Tags */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-[11px] text-slate-500">
-                          {stats.paidCount} {t.dashboard.paid.toLowerCase()} • {stats.partialCount}{' '}
-                          {t.dashboard.partial.toLowerCase()} • {stats.unpaidCount}{' '}
-                          {t.dashboard.unpaid.toLowerCase()}
-                        </span>
-                        <span className="font-mono font-bold text-slate-700 text-xs">
-                          {stats.progressPercentage}%
-                        </span>
-                      </div>
-                      <ProgressBar progress={stats.progressPercentage} height="sm" />
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
               );
             })}

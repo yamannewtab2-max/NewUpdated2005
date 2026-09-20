@@ -5,6 +5,7 @@ import { Button } from '../common/Button';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { GroupOverviewCards } from './GroupOverviewCards';
 import { PaymentTable } from './PaymentTable';
+import { PaymentRecorder } from './PaymentRecorder';
 import { GroupModal } from './GroupModal';
 import { ProgressBar } from '../common/ProgressBar';
 import {
@@ -60,6 +61,39 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => 
   const subgroups = getSubgroups(groupId);
   const stats = getGroupStats(groupId, true);
   const parentGroup = group.parentId ? getGroup(group.parentId) : null;
+
+  // A list with no students is purely a payment log — nothing but the amount,
+  // what it was for, the "+" button and this month's payments.
+  const isPaymentOnly = (group.studentIds || []).length === 0 && subgroups.length === 0;
+
+  if (isPaymentOnly) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-200/80">
+          {parentGroup && (
+            <button
+              onClick={() => setSelectedGroupId(parentGroup.id)}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors mr-1"
+              title={t.groups.backToParent.replace('{parent}', parentGroup.name)}
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <Breadcrumbs
+            hierarchy={hierarchy}
+            onSelectGroup={(id) => setSelectedGroupId(id)}
+            rootLabel={t.groups.allRootGroups}
+          />
+        </div>
+
+        <h2 dir="auto" className="text-base font-bold text-slate-900 break-words">
+          {group.name}
+        </h2>
+
+        <PaymentRecorder groupId={group.id} scope="month" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -124,7 +158,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => 
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
               Default Rate / Student
             </span>
-            <span className="text-base font-mono font-bold text-indigo-700">
+            <span className="text-base font-mono font-bold text-indigo-700 tabular-nums break-words">
               {formatMoney(group.paymentAmount)}
             </span>
           </div>
@@ -199,7 +233,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => 
                       <span className="text-slate-500">
                         {subStats.totalStudents} {t.dashboard.studentsLabel}
                       </span>
-                      <span className="font-mono font-bold text-slate-800">
+                      <span className="font-mono font-bold text-slate-800 tabular-nums break-words min-w-0 text-right">
                         {formatMoney(subStats.totalCollected)} / {formatMoney(subStats.totalExpected)}
                       </span>
                     </div>
@@ -216,9 +250,7 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => 
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-              {t.groups.studentsHeading}
-            </h3>
+            <Users className="w-4 h-4 text-indigo-600" />
             <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
               {(group.studentIds || []).length}
             </span>
@@ -234,8 +266,12 @@ export const GroupDetailView: React.FC<GroupDetailViewProps> = ({ groupId }) => 
           </Button>
         </div>
 
-        {/* Student Payment Table */}
-        <PaymentTable groupId={group.id} studentIds={group.studentIds || []} />
+        {/* Students list — or the payment log when the list has no students */}
+        {(group.studentIds || []).length === 0 ? (
+          <PaymentRecorder groupId={group.id} />
+        ) : (
+          <PaymentTable groupId={group.id} studentIds={group.studentIds || []} />
+        )}
       </div>
 
       {/* Edit Group Modal */}

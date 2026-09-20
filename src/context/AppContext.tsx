@@ -6,6 +6,8 @@ import {
   StudentGroup,
   TrackingGroup,
   PaymentRecord,
+  MonthlyPayment,
+  PaymentEntry,
   Language,
   Currency,
   ActiveView,
@@ -15,7 +17,10 @@ import {
   PaymentStatus,
 } from '../types';
 import { initialStudents, initialMahjas, initialRooms, initialGroups, initialPayments } from '../mock/initialData';
+import { buildRosterSeed } from '../data/roster';
 import { translations } from '../i18n/translations';
+import { monthStatus } from '../utils/monthlyPayments';
+import { normalizeLevel } from '../utils/level';
 
 interface AppContextType {
   // State
@@ -105,6 +110,33 @@ interface AppContextType {
   updatePayment: (groupId: string, studentId: string, paidAmount: number, requiredAmount?: number) => void;
   markAsPaid: (groupId: string, studentId: string) => void;
 
+  // Monthly Payments — every student owes a fee for every month
+  monthlyPayments: MonthlyPayment[];
+  monthlyDues: Record<string, number>;
+  /** Due for a student: explicit monthly due, else the sum of their tracking-group amounts. */
+  suggestedMonthlyDue: (studentId: string) => number;
+  setStudentMonthlyDue: (studentId: string, amount: number) => void;
+  /** Record (or overwrite) the amount paid by a student for a given 'YYYY-MM'. */
+  recordMonthlyPayment: (
+    studentId: string,
+    month: string,
+    amountPaid: number,
+    notes?: string,
+    amountDueOverride?: number
+  ) => void;
+  /** Mark a month fully paid using the student's monthly due. */
+  markMonthPaid: (studentId: string, month: string) => void;
+  clearMonthlyPayment: (studentId: string, month: string) => void;
+
+  // Recorded payments for student-less lists
+  paymentEntries: PaymentEntry[];
+  addPaymentEntry: (groupId: string, amount: number, note?: string) => void;
+  deletePaymentEntry: (id: string) => void;
+  /** Reusable "what was it for" phrases: click one to refill the box. */
+  notePresets: string[];
+  addNotePreset: (phrase: string) => void;
+  removeNotePreset: (phrase: string) => void;
+
   // Helpers & Queries
   formatMoney: (amount: number) => string;
   getGroup: (id: string) => TrackingGroup | undefined;
@@ -127,6 +159,9 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/** How long a notification stays on screen before removing itself. */
+const TOAST_AUTO_DISMISS_MS = 500;
+
 const STORAGE_KEYS = {
   STUDENTS: 'trackly_students_clean_v4',
   MAHJAS: 'trackly_mahjas_v2',
@@ -134,9 +169,57 @@ const STORAGE_KEYS = {
   STUDENT_GROUPS: 'trackly_student_groups_v1',
   GROUPS: 'trackly_groups_clean_v2',
   PAYMENTS: 'trackly_payments_clean_v2',
+  MONTHLY_PAYMENTS: 'trackly_monthly_payments_v1',
+  MONTHLY_DUES: 'trackly_monthly_dues_v1',
+  PAYMENT_ENTRIES: 'trackly_payment_entries_v1',
+  NOTE_PRESETS: 'trackly_note_presets_v1',
+  ROSTER_SEEDED: 'trackly_roster_26_31_seeded_v1',
+  NOTE_PRESETS_SEEDED: 'trackly_note_presets_seeded_v1',
   LANGUAGE: 'trackly_lang_v1',
   CURRENCY: 'trackly_currency_v2',
 };
+
+/**
+ * Default "what was it for" phrases — the institution's expense items.
+ * (على حسب = as needed, شهريا = monthly; the chip carries the item name only.)
+ */
+const DEFAULT_NOTE_PRESETS = [
+  'الرز', // rice — as needed
+  'الإدم', // sides — as needed
+  'أجرة الطباخ', // cook's wage — monthly
+  'الشبكة', // network — monthly
+  'الكهرباء', // electricity — monthly
+  'غير ذلك', // other — as needed
+];
+
+/**
+ * One-time import of the real dormitory roster (mahjas 26–31 from the PDF).
+ * On the first load after this ships, the demo students/rooms/mahjas are replaced
+ * by the roster, and student-linked data that pointed at the demo set is dropped.
+ * Payment phrases (note presets) are kept.
+ */
+const ROSTER_IMPORT_PENDING = (() => {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.ROSTER_SEEDED) !== '1';
+  } catch {
+    return false;
+  }
+})();
+
+const ROSTER_SEED = buildRosterSeed();
+
+if (ROSTER_IMPORT_PENDING) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ROSTER_SEEDED, '1');
+    localStorage.removeItem(STORAGE_KEYS.GROUPS);
+    localStorage.removeItem(STORAGE_KEYS.PAYMENTS);
+    localStorage.removeItem(STORAGE_KEYS.MONTHLY_PAYMENTS);
+    localStorage.removeItem(STORAGE_KEYS.MONTHLY_DUES);
+    localStorage.removeItem(STORAGE_KEYS.PAYMENT_ENTRIES);
+  } catch {
+    /* ignore */
+  }
+}
 
 // Clean legacy demo data from localStorage if present
 try {
@@ -176,6 +259,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currency]);
 
   const [mahjas, setMahjas] = useState<Mahja[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return ROSTER_SEED.mahjas as Mahja[];
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MAHJAS);
       return saved ? JSON.parse(saved) : initialMahjas;
@@ -185,6 +269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [rooms, setRooms] = useState<Room[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return ROSTER_SEED.rooms as Room[];
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ROOMS);
       return saved ? JSON.parse(saved) : initialRooms;
@@ -194,17 +279,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [students, setStudents] = useState<Student[]>(() => {
+    // Older builds could store a level as a number; normalise so every view can
+    // treat student.level as a string (a numeric level used to crash the wizard).
+    const clean = (list: Student[]): Student[] => list.map((s) => ({ ...s, level: normalizeLevel(s.level) }));
+    if (ROSTER_IMPORT_PENDING) return clean(ROSTER_SEED.students as Student[]);
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.STUDENTS);
       if (saved) {
         const parsed: Student[] = JSON.parse(saved);
         if (parsed && parsed.length > 0) {
-          return parsed;
+          return clean(parsed);
         }
       }
-      return initialStudents;
+      return clean(initialStudents);
     } catch {
-      return initialStudents;
+      return clean(initialStudents);
     }
   });
 
@@ -218,6 +307,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [groups, setGroups] = useState<TrackingGroup[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.GROUPS);
       if (saved) {
@@ -241,6 +331,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [payments, setPayments] = useState<PaymentRecord[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PAYMENTS);
       if (saved) {
@@ -261,6 +352,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return initialPayments;
     } catch {
       return initialPayments;
+    }
+  });
+
+  const [monthlyPayments, setMonthlyPayments] = useState<MonthlyPayment[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MONTHLY_PAYMENTS);
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((p: any) => ({
+            id: String(p.id || `mp-${p.studentId}-${p.month}`),
+            studentId: String(p.studentId || ''),
+            month: String(p.month || ''),
+            amountDue: Number(p.amountDue) || 0,
+            amountPaid: Number(p.amountPaid) || 0,
+            status: (p.status === 'paid' || p.status === 'partial' || p.status === 'unpaid') ? p.status : 'unpaid',
+            paidAt: p.paidAt,
+            notes: p.notes,
+          }))
+          .filter((p: MonthlyPayment) => p.studentId && p.month);
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [monthlyDues, setMonthlyDues] = useState<Record<string, number>>(() => {
+    if (ROSTER_IMPORT_PENDING) return {};
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.MONTHLY_DUES);
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const [paymentEntries, setPaymentEntries] = useState<PaymentEntry[]>(() => {
+    if (ROSTER_IMPORT_PENDING) return [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.PAYMENT_ENTRIES);
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((e: any) => ({
+            id: String(e.id || `pe-${Date.now()}`),
+            groupId: String(e.groupId || ''),
+            amount: Number(e.amount) || 0,
+            note: e.note,
+            createdAt: e.createdAt || new Date().toISOString(),
+          }))
+          .filter((e: PaymentEntry) => e.groupId);
+      }
+      return [];
+    } catch {
+      return [];
     }
   });
 
@@ -320,6 +469,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [payments]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MONTHLY_PAYMENTS, JSON.stringify(monthlyPayments));
+    } catch (e) {
+      console.warn('Failed saving monthly payments to localStorage', e);
+    }
+  }, [monthlyPayments]);
+
+  const [notePresets, setNotePresets] = useState<string[]>(() => {
+    let stored: string[] = [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.NOTE_PRESETS);
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (Array.isArray(parsed)) {
+        stored = parsed.map((w: any) => String(w)).filter((w: string) => w.trim().length > 0);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    // Seed the expense items once (also for devices that already stored an empty
+    // list before these defaults existed). After that, what the user keeps is final.
+    try {
+      if (localStorage.getItem(STORAGE_KEYS.NOTE_PRESETS_SEEDED) !== '1') {
+        localStorage.setItem(STORAGE_KEYS.NOTE_PRESETS_SEEDED, '1');
+        const merged = [...DEFAULT_NOTE_PRESETS, ...stored.filter((w) => !DEFAULT_NOTE_PRESETS.includes(w))];
+        localStorage.setItem(STORAGE_KEYS.NOTE_PRESETS, JSON.stringify(merged));
+        return merged;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return stored.length > 0 ? stored : stored;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.NOTE_PRESETS, JSON.stringify(notePresets));
+    } catch (e) {
+      console.warn('Failed saving note presets to localStorage', e);
+    }
+  }, [notePresets]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.PAYMENT_ENTRIES, JSON.stringify(paymentEntries));
+    } catch (e) {
+      console.warn('Failed saving payment entries to localStorage', e);
+    }
+  }, [paymentEntries]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MONTHLY_DUES, JSON.stringify(monthlyDues));
+    } catch (e) {
+      console.warn('Failed saving monthly dues to localStorage', e);
+    }
+  }, [monthlyDues]);
+
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
     try {
@@ -343,6 +552,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const newToast: Toast = { ...toast, id };
     setToasts((prev) => [...prev.slice(-3), newToast]); // keep max 4 toasts
+    // Notifications auto-dismiss — they must never pile up on screen.
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, TOAST_AUTO_DISMISS_MS);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -1190,17 +1403,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStudentGroups([]);
     setGroups(initialGroups);
     setPayments(initialPayments);
+    setMonthlyPayments([]);
+    setMonthlyDues({});
+    setPaymentEntries([]);
     localStorage.removeItem(STORAGE_KEYS.STUDENTS);
     localStorage.removeItem(STORAGE_KEYS.MAHJAS);
     localStorage.removeItem(STORAGE_KEYS.ROOMS);
     localStorage.removeItem(STORAGE_KEYS.STUDENT_GROUPS);
     localStorage.removeItem(STORAGE_KEYS.GROUPS);
     localStorage.removeItem(STORAGE_KEYS.PAYMENTS);
+    localStorage.removeItem(STORAGE_KEYS.MONTHLY_PAYMENTS);
+    localStorage.removeItem(STORAGE_KEYS.MONTHLY_DUES);
+    localStorage.removeItem(STORAGE_KEYS.PAYMENT_ENTRIES);
     addToast({
       type: 'info',
       title: t.settings.resetSuccess,
     });
   }, [t, addToast]);
+
+  // ---- Monthly payments: every student owes a fee for every month ----
+  const suggestedMonthlyDue = useCallback(
+    (studentId: string): number => {
+      const explicit = monthlyDues[studentId];
+      if (explicit !== undefined) return Number(explicit) || 0;
+      const inGroups = groups.filter((g) => (g.studentIds || []).includes(studentId));
+      return inGroups.reduce((sum, g) => sum + (Number(g.paymentAmount) || 0), 0);
+    },
+    [monthlyDues, groups]
+  );
+
+  const recordMonthlyPayment = useCallback(
+    (
+      studentId: string,
+      month: string,
+      amountPaid: number,
+      notes?: string,
+      amountDueOverride?: number
+    ) => {
+      if (!studentId || !month) return;
+      const due = suggestedMonthlyDue(studentId);
+      const paid = Math.max(0, Number(amountPaid) || 0);
+
+      setMonthlyPayments((prev) => {
+        const existing = prev.find((p) => p.studentId === studentId && p.month === month);
+        // An explicit due wins: "paid X for this month" means the month is settled.
+        const amountDue =
+          amountDueOverride !== undefined
+            ? Math.max(0, Number(amountDueOverride) || 0)
+            : existing && existing.amountDue
+            ? existing.amountDue
+            : due;
+        const record: MonthlyPayment = {
+          id: existing?.id || `mp-${studentId}-${month}`,
+          studentId,
+          month,
+          amountDue,
+          amountPaid: paid,
+          status: monthStatus(paid, amountDue),
+          paidAt: new Date().toISOString(),
+          notes: notes ?? existing?.notes,
+        };
+        return existing ? prev.map((p) => (p.id === existing.id ? record : p)) : [...prev, record];
+      });
+    },
+    [suggestedMonthlyDue]
+  );
+
+  const markMonthPaid = useCallback(
+    (studentId: string, month: string) => {
+      // Explicitly marking a month paid always produces a paid month — even when
+      // no amount is configured yet (the amount then simply stays 0).
+      const amount = Math.max(0, suggestedMonthlyDue(studentId));
+      setMonthlyPayments((prev) => {
+        const existing = prev.find((p) => p.studentId === studentId && p.month === month);
+        const record: MonthlyPayment = {
+          id: existing?.id || `mp-${studentId}-${month}`,
+          studentId,
+          month,
+          amountDue: existing?.amountDue || amount,
+          amountPaid: amount,
+          status: 'paid',
+          paidAt: new Date().toISOString(),
+          notes: existing?.notes,
+        };
+        return existing ? prev.map((p) => (p.id === existing.id ? record : p)) : [...prev, record];
+      });
+    },
+    [suggestedMonthlyDue]
+  );
+
+  const clearMonthlyPayment = useCallback((studentId: string, month: string) => {
+    setMonthlyPayments((prev) => prev.filter((p) => !(p.studentId === studentId && p.month === month)));
+  }, []);
+
+  const addNotePreset = useCallback((phrase: string) => {
+    const word = phrase.trim();
+    if (!word) return;
+    setNotePresets((prev) => (prev.some((w) => w.toLowerCase() === word.toLowerCase()) ? prev : [...prev, word]));
+  }, []);
+
+  const removeNotePreset = useCallback((phrase: string) => {
+    setNotePresets((prev) => prev.filter((w) => w !== phrase));
+  }, []);
+
+  const addPaymentEntry = useCallback((groupId: string, amount: number, note?: string) => {
+    const value = Number(amount) || 0;
+    if (!groupId || value === 0) return;
+    setPaymentEntries((prev) => [
+      ...prev,
+      {
+        id: `pe-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        groupId,
+        amount: value,
+        note: note?.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+  }, []);
+
+  const deletePaymentEntry = useCallback((id: string) => {
+    setPaymentEntries((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const setStudentMonthlyDue = useCallback((studentId: string, amount: number) => {
+    setMonthlyDues((prev) => ({ ...prev, [studentId]: Math.max(0, Number(amount) || 0) }));
+  }, []);
 
   return (
     <AppContext.Provider
@@ -1251,6 +1578,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setGroupStudents,
         updatePayment,
         markAsPaid,
+        monthlyPayments,
+        monthlyDues,
+        suggestedMonthlyDue,
+        setStudentMonthlyDue,
+        recordMonthlyPayment,
+        markMonthPaid,
+        clearMonthlyPayment,
+        paymentEntries,
+        addPaymentEntry,
+        deletePaymentEntry,
+        notePresets,
+        addNotePreset,
+        removeNotePreset,
         formatMoney,
         getGroup,
         getSubgroups,

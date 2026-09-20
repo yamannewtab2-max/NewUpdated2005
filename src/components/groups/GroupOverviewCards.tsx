@@ -2,147 +2,98 @@ import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { GroupStats } from '../../types';
 import { ProgressBar } from '../common/ProgressBar';
-import {
-  Users,
-  DollarSign,
-  CheckCircle2,
-  AlertCircle,
-  Clock,
-  TrendingUp,
-} from 'lucide-react';
+import { TrendingUp, Users } from 'lucide-react';
 
 interface GroupOverviewCardsProps {
   stats: GroupStats;
   groupName: string;
 }
 
+/** One money figure inside the summary card — always stays inside its column. */
+const MoneyStat: React.FC<{ label: string; value: string; tone: 'slate' | 'emerald' | 'amber' }> = ({
+  label,
+  value,
+  tone,
+}) => {
+  const valueTone =
+    tone === 'emerald' ? 'text-emerald-700' : tone === 'amber' ? 'text-amber-700' : 'text-slate-900';
+
+  return (
+    <div className="min-w-0 px-3 py-3">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 leading-tight break-words">
+        {label}
+      </div>
+      <div
+        className={`mt-1 text-[13px] sm:text-sm font-bold font-mono tabular-nums leading-tight break-words ${valueTone}`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+};
+
 export const GroupOverviewCards: React.FC<GroupOverviewCardsProps> = ({ stats, groupName }) => {
   const { t, formatMoney } = useApp();
 
   return (
-    <div className="space-y-4">
-      {/* Top Bar with Progress */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-indigo-600" />
-              {t.overview.groupOverview} — {groupName}
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {stats.paidCount} {t.overview.paidStudents.toLowerCase()} • {stats.partialCount}{' '}
-              {t.overview.partiallyPaid.toLowerCase()} • {stats.unpaidCount}{' '}
-              {t.overview.unpaidStudents.toLowerCase()}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            <span className="text-2xl font-bold font-mono tracking-tight text-slate-900">
-              {stats.progressPercentage}%
-            </span>
-            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-              {t.overview.paymentProgress}
-            </span>
-          </div>
+    <div className="rounded-2xl bg-white border border-slate-200/80 shadow-2xs overflow-hidden">
+      {/* Header: name + progress */}
+      <div className="flex items-center gap-3 px-4 pt-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5 min-w-0">
+            <TrendingUp className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span className="truncate">{t.overview.groupOverview}</span>
+          </h3>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate" dir="auto">
+            {groupName}
+          </p>
         </div>
-
-        {/* Visual Progress Bar */}
-        <ProgressBar progress={stats.progressPercentage} height="md" />
+        <span className="shrink-0 text-lg font-bold font-mono tabular-nums text-slate-900">
+          {stats.progressPercentage}%
+        </span>
       </div>
 
-      {/* 4 Financial Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Students */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium text-slate-500">{t.overview.totalStudents}</span>
-            <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600">
-              <Users className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900">
-              {stats.totalStudents}
-            </span>
-            <span className="text-xs text-slate-400 ml-1.5">{t.dashboard.studentsLabel}</span>
-          </div>
-        </div>
-
-        {/* Expected Amount */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium text-slate-500">{t.overview.expectedAmount}</span>
-            <div className="p-1.5 rounded-lg bg-slate-100 text-slate-600">
-              <DollarSign className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-900">
-              {formatMoney(stats.totalExpected)}
-            </span>
-          </div>
-        </div>
-
-        {/* Amount Collected */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium text-emerald-600 font-semibold">
-              {t.overview.amountCollected}
-            </span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-700">
-              {formatMoney(stats.totalCollected)}
-            </span>
-          </div>
-        </div>
-
-        {/* Remaining Amount */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-medium text-slate-500">{t.overview.remainingAmount}</span>
-            <div className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div>
-            <span className="text-xl sm:text-2xl font-bold font-mono text-slate-800">
-              {formatMoney(stats.remainingAmount)}
-            </span>
-          </div>
-        </div>
+      <div className="px-4 py-3">
+        <ProgressBar progress={stats.progressPercentage} height="sm" />
       </div>
 
-      {/* Student Status Trio Breakdown */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4 text-center">
-        <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100/80">
-          <p className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide">
-            {t.overview.paidStudents}
-          </p>
-          <p className="text-lg sm:text-xl font-bold font-mono text-emerald-800 mt-0.5">
-            {stats.paidCount}
-          </p>
-        </div>
+      {/* Money: one row, three columns, dividers instead of heavy boxes */}
+      <div className="grid grid-cols-3 divide-x divide-slate-100 border-t border-slate-100">
+        <MoneyStat
+          label={t.overview.expectedAmount}
+          value={formatMoney(stats.totalExpected)}
+          tone="slate"
+        />
+        <MoneyStat
+          label={t.overview.amountCollected}
+          value={formatMoney(stats.totalCollected)}
+          tone="emerald"
+        />
+        <MoneyStat
+          label={t.overview.remainingAmount}
+          value={formatMoney(stats.remainingAmount)}
+          tone="amber"
+        />
+      </div>
 
-        <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-100/80">
-          <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wide">
-            {t.overview.partiallyPaid}
-          </p>
-          <p className="text-lg sm:text-xl font-bold font-mono text-amber-900 mt-0.5">
-            {stats.partialCount}
-          </p>
-        </div>
-
-        <div className="p-3 rounded-xl bg-rose-50/60 border border-rose-100/80">
-          <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide">
-            {t.overview.unpaidStudents}
-          </p>
-          <p className="text-lg sm:text-xl font-bold font-mono text-rose-800 mt-0.5">
-            {stats.unpaidCount}
-          </p>
-        </div>
+      {/* Status as light pills — one row instead of three boxes */}
+      <div className="flex items-center gap-1.5 flex-wrap px-4 py-3 border-t border-slate-100">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          {stats.paidCount} {t.overview.paidStudents}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          {stats.partialCount} {t.overview.partiallyPaid}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          {stats.unpaidCount} {t.overview.unpaidStudents}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-400 shrink-0">
+          <Users className="w-3 h-3" />
+          {stats.totalStudents}
+        </span>
       </div>
     </div>
   );

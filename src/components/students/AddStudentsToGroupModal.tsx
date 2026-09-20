@@ -154,7 +154,7 @@ export const AddStudentsToGroupModal: React.FC<AddStudentsToGroupModalProps> = (
                     </div>
 
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{student.name}</p>
+                      <p dir="auto" className="text-sm font-semibold text-slate-800">{student.name}</p>
                       {student.level && (
                         <div className="flex items-center gap-2 text-xs text-amber-700 mt-0.5 font-medium">
                           <span>{student.level}</span>

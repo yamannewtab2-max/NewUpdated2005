@@ -1,256 +1,180 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Student, PaymentRecord } from '../../types';
-import { Badge } from '../common/Badge';
-import { Button } from '../common/Button';
+import { Student } from '../../types';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { EditPaymentModal } from './EditPaymentModal';
-import { Check, Edit3, DollarSign, ArrowRight } from 'lucide-react';
+import { StudentProfileModal } from '../students/StudentProfileModal';
+import { CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { currentMonthKey } from '../../utils/months';
 
 interface PaymentTableProps {
   groupId: string;
   studentIds: string[];
 }
 
+/**
+ * Compact payment list: one short row per student —
+ * status button (paid / unpaid) + remove button on the left, name on the right.
+ */
 export const PaymentTable: React.FC<PaymentTableProps> = ({ groupId, studentIds }) => {
   const {
     t,
     getStudent,
     getStudentPayment,
     getGroup,
-    getStudentGroup,
-    getMahja,
-    getRoom,
     markAsPaid,
     updatePayment,
-    formatMoney,
-    currencySymbol,
-    currency,
+    setGroupStudents,
+    monthlyPayments,
+    recordMonthlyPayment,
+    clearMonthlyPayment,
+    suggestedMonthlyDue,
   } = useApp();
   const group = getGroup(groupId);
+  const currentKey = currentMonthKey();
 
-  // States for confirmation and editing
-  const [studentToMarkPaid, setStudentToMarkPaid] = useState<{ student: Student; required: number } | null>(null);
-  const [studentToEdit, setStudentToEdit] = useState<{ student: Student; record?: PaymentRecord } | null>(null);
-
-  // Partial payment quick-input state per student (temporary local input)
-  const [quickInputAmounts, setQuickInputAmounts] = useState<Record<string, string>>({});
-
-  const defaultRequired = group ? group.paymentAmount : currency === 'IDR' ? 50000 : 100;
-
-  const handleQuickAmountChange = (studentId: string, value: string) => {
-    setQuickInputAmounts((prev) => ({ ...prev, [studentId]: value }));
-  };
-
-  const handleQuickPartialApply = (studentId: string, currentRequired: number) => {
-    const val = quickInputAmounts[studentId];
-    if (val === undefined || val === '') return;
-    const num = Math.max(0, Number(val) || 0);
-    updatePayment(groupId, studentId, num, currentRequired);
-    // clear input
-    setQuickInputAmounts((prev) => {
-      const next = { ...prev };
-      delete next[studentId];
-      return next;
-    });
-  };
+  const [studentToRemove, setStudentToRemove] = useState<Student | null>(null);
+  const [profileStudent, setProfileStudent] = useState<Student | null>(null);
+  const [confirmUnpaid, setConfirmUnpaid] = useState<Student | null>(null);
 
   const safeStudentIds = Array.isArray(studentIds) ? studentIds.filter(Boolean) : [];
 
   if (safeStudentIds.length === 0) {
     return (
-      <div className="p-8 text-center text-slate-500 text-xs bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+      <div className="p-6 text-center text-slate-500 text-xs bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
         {t.groups.noStudentsInGroupDesc}
       </div>
     );
   }
 
+  /**
+   * The list and the student profile are one thing: marking paid here also
+   * records this month in the student's monthly ledger (and unmarking clears it).
+   */
+  const togglePaid = (studentId: string, isPaid: boolean) => {
+    const record = getStudentPayment(groupId, studentId);
+    const required = record ? record.requiredAmount : group ? group.paymentAmount : 0;
+    if (isPaid) {
+      updatePayment(groupId, studentId, 0, required);
+      clearMonthlyPayment(studentId, currentKey);
+    } else {
+      markAsPaid(groupId, studentId);
+      const amount = required > 0 ? required : suggestedMonthlyDue(studentId);
+      // Settle the month with exactly what was paid here, so the profile shows Paid
+      // even when the student's monthly due is a different (larger) number.
+      if (amount > 0) recordMonthlyPayment(studentId, currentKey, amount, undefined, amount);
+    }
+  };
+
   return (
     <>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-              <th className="py-3 px-4 sm:px-6">{t.payments.tableStudent}</th>
-              <th className="py-3 px-4">{t.payments.tableRequired}</th>
-              <th className="py-3 px-4">{t.payments.tablePaid}</th>
-              <th className="py-3 px-4">{t.payments.tableStatus}</th>
-              <th className="py-3 px-4 sm:px-6 text-right">{t.payments.tableAction}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 text-sm">
-            {safeStudentIds.map((studentId) => {
-              const student = getStudent(studentId);
-              if (!student) return null;
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden max-h-[340px] overflow-y-auto">
+        {safeStudentIds.map((studentId) => {
+          const student = getStudent(studentId);
+          if (!student) return null;
 
-              const payment = getStudentPayment(groupId, studentId);
-              const required = payment ? payment.requiredAmount : defaultRequired;
-              const paid = payment ? payment.paidAmount : 0;
-              const status = payment ? payment.status : 'unpaid';
+          const payment = getStudentPayment(groupId, studentId);
+          const status = payment ? payment.status : 'unpaid';
+          const required = payment ? payment.requiredAmount : group ? group.paymentAmount : 0;
+          // Paid in either the list record or this month's ledger
+          const monthlyPaid = monthlyPayments.some(
+            (m) => m.studentId === studentId && m.month === currentKey && m.status === 'paid'
+          );
+          const isPaid = status === 'paid' || monthlyPaid;
+          const shownStatus = isPaid ? 'paid' : status;
 
-              const initials = student.name
-                .split(' ')
-                .map((n) => n[0])
-                .slice(0, 2)
-                .join('')
-                .toUpperCase();
+          const statusClass =
+            shownStatus === 'paid'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              : status === 'partial'
+              ? 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
+              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100';
 
-              const studentGroup = student.studentGroupId ? getStudentGroup(student.studentGroupId) : null;
-              const mahjaObj = student.mahjaId ? getMahja(student.mahjaId) : undefined;
-              const roomObj = student.roomId ? getRoom(student.roomId) : undefined;
+          return (
+            <div
+              key={studentId}
+              className="flex items-center gap-2 px-2.5 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors"
+            >
+              {/* Status button — tap to switch paid / unpaid */}
+              <button
+                type="button"
+                onClick={() => (isPaid ? setConfirmUnpaid(student) : togglePaid(studentId, false))}
+                title={isPaid ? t.payments.unpaidStatus : t.payments.markAsPaid}
+                className={`shrink-0 inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${statusClass}`}
+              >
+                {shownStatus === 'paid' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Clock className="w-3.5 h-3.5" />
+                )}
+                {shownStatus === 'paid'
+                  ? t.payments.paidStatus
+                  : shownStatus === 'partial'
+                  ? t.payments.partialStatus
+                  : t.payments.unpaidStatus}
+              </button>
 
-              return (
-                <tr key={studentId} className="hover:bg-slate-50/60 transition-colors group">
-                  {/* Student Name */}
-                  <td className="py-3.5 px-4 sm:px-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200/60">
-                        {initials}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-semibold text-slate-900 text-xs sm:text-sm">
-                            {student.name}
-                          </p>
-                          {student.level && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
-                              {student.level}
-                            </span>
-                          )}
-                          {studentGroup && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-100/80">
-                              {studentGroup.name}
-                            </span>
-                          )}
-                        </div>
-                        {(roomObj || mahjaObj) && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                            <span className="text-slate-500 font-sans">
-                              {mahjaObj?.name || 'Mahja'} {roomObj ? `/ ${roomObj.name}` : ''}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
+              {/* Remove this student from the list */}
+              <button
+                type="button"
+                onClick={() => setStudentToRemove(student)}
+                title={t.groups.removeFromList}
+                aria-label={t.groups.removeFromList}
+                className="shrink-0 p-1 rounded-lg border border-slate-200 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
 
-                  {/* Required Amount */}
-                  <td className="py-3.5 px-4 font-mono font-medium text-slate-600 text-xs sm:text-sm">
-                    {formatMoney(required)}
-                  </td>
+              <span className="flex-1" />
 
-                  {/* Paid Amount & Quick Partial Input */}
-                  <td className="py-3.5 px-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="font-mono font-bold text-slate-900 text-xs sm:text-sm">
-                        {formatMoney(paid)}
-                      </span>
-                      {status !== 'paid' && (
-                        <div className="flex items-center gap-1.5 pt-0.5">
-                          <div className="relative flex items-center w-24 sm:w-28">
-                            <span className="absolute left-2 text-[10px] text-slate-400 font-mono font-semibold">
-                              {currencySymbol}
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              placeholder="Partial"
-                              value={quickInputAmounts[studentId] ?? ''}
-                              onChange={(e) => handleQuickAmountChange(studentId, e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleQuickPartialApply(studentId, required);
-                                }
-                              }}
-                              className={`w-full text-[11px] ${
-                                currencySymbol.length > 1 ? 'pl-7' : 'pl-5'
-                              } pr-1.5 py-0.5 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-indigo-500 font-mono`}
-                            />
-                          </div>
-                          {quickInputAmounts[studentId] !== undefined && quickInputAmounts[studentId] !== '' && (
-                            <button
-                              onClick={() => handleQuickPartialApply(studentId, required)}
-                              className="p-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-semibold transition-colors"
-                              title="Apply amount"
-                            >
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Status Badge */}
-                  <td className="py-3.5 px-4">
-                    <Badge status={status}>
-                      {status === 'paid'
-                        ? t.payments.paidStatus
-                        : status === 'partial'
-                        ? `${t.payments.partialStatus} (${formatMoney(paid)})`
-                        : t.payments.unpaidStatus}
-                    </Badge>
-                  </td>
-
-                  {/* Actions */}
-                  <td className="py-3.5 px-4 sm:px-6 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {status !== 'paid' && (
-                        <Button
-                          variant="success"
-                          size="sm"
-                          onClick={() => setStudentToMarkPaid({ student, required })}
-                          leftIcon={<Check className="w-3.5 h-3.5" />}
-                          className="text-xs"
-                        >
-                          {t.payments.markAsPaid}
-                        </Button>
-                      )}
-
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setStudentToEdit({ student, record: payment })}
-                        leftIcon={<Edit3 className="w-3.5 h-3.5" />}
-                        className="text-xs"
-                      >
-                        {t.payments.editPayment}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              {/* Name — tap to open the student profile (months paid / not paid) */}
+              <button
+                type="button"
+                dir="auto"
+                onClick={() => setProfileStudent(student)}
+                title={t.students.viewProfileBtn}
+                className="text-sm font-semibold text-slate-900 truncate max-w-[60%] text-right hover:text-indigo-700 cursor-pointer"
+              >
+                {student.name}
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Confirmation Dialog before marking payment as paid */}
-      {studentToMarkPaid && (
+      {profileStudent && (
+        <StudentProfileModal student={profileStudent} onClose={() => setProfileStudent(null)} />
+      )}
+
+      {confirmUnpaid && (
         <ConfirmDialog
-          isOpen={!!studentToMarkPaid}
-          onClose={() => setStudentToMarkPaid(null)}
+          isOpen={!!confirmUnpaid}
+          onClose={() => setConfirmUnpaid(null)}
           onConfirm={() => {
-            markAsPaid(groupId, studentToMarkPaid.student.id);
+            togglePaid(confirmUnpaid.id, true);
+            setConfirmUnpaid(null);
           }}
-          title={t.payments.markPaidConfirmTitle}
-          message={t.payments.markPaidConfirmMessage
-            .replace('{name}', studentToMarkPaid.student.name)
-            .replace('{amount}', formatMoney(studentToMarkPaid.required))}
-          confirmText={t.payments.confirmMarkPaidBtn}
-          variant="success"
+          title={t.groups.markUnpaidTitle}
+          message={t.groups.markUnpaidMessage.replace('{name}', confirmUnpaid.name)}
+          confirmText={t.groups.markUnpaidConfirm}
+          variant="danger"
         />
       )}
 
-      {/* Edit Payment Modal */}
-      {studentToEdit && (
-        <EditPaymentModal
-          isOpen={!!studentToEdit}
-          onClose={() => setStudentToEdit(null)}
-          groupId={groupId}
-          student={studentToEdit.student}
-          paymentRecord={studentToEdit.record}
+      {studentToRemove && (
+        <ConfirmDialog
+          isOpen={!!studentToRemove}
+          onClose={() => setStudentToRemove(null)}
+          onConfirm={() => {
+            setGroupStudents(
+              groupId,
+              safeStudentIds.filter((id) => id !== studentToRemove.id)
+            );
+            setStudentToRemove(null);
+          }}
+          title={t.groups.removeFromListTitle}
+          message={t.groups.removeFromListMessage.replace('{name}', studentToRemove.name)}
+          confirmText={t.groups.removeFromListConfirm}
+          variant="danger"
         />
       )}
     </>

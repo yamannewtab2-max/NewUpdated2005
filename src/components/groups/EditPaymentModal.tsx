@@ -84,7 +84,7 @@ export const EditPaymentModal: React.FC<EditPaymentModalProps> = ({
         {/* Student & Status Summary */}
         <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
           <div>
-            <p className="text-xs font-semibold text-slate-900">{student.name}</p>
+            <p dir="auto" className="text-xs font-semibold text-slate-900">{student.name}</p>
             {student.level && (
               <p className="text-[11px] text-amber-700 font-medium">{student.level}</p>
             )}
