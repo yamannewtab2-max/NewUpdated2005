@@ -1,0 +1,6 @@
+{
+  "name": "Trackly",
+  "description": "Premium payment and student tracking web application featuring hierarchical nested groups, student management, and real-time payment progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
