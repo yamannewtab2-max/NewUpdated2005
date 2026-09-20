@@ -7,6 +7,7 @@ import { RoomModal } from './RoomModal';
 import { AddStudentsToRoomModal } from './AddStudentsToRoomModal';
 import { StudentProfileModal } from './StudentProfileModal';
 import { MahjaProfileModal } from './MahjaProfileModal';
+import { WhatsAppButton } from '../common/WhatsAppButton';
 import { levelNumber, levelBadgeColor } from '../../utils/level';
 import { currentMonthKey } from '../../utils/months';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -693,11 +694,11 @@ export const StudentManagerView: React.FC = () => {
                                 {activeRoomStudents.map((student) => {
                                   const status = studentMonthStatus(student.id);
                                   return (
-                                    <button
-                                      key={student.id}
-                                      type="button"
-                                      onClick={() => setProfileStudentId(student.id)}
-                                      title={t.students.viewProfileBtn}
+                                    <div key={student.id} className="flex items-center gap-1 min-w-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => setProfileStudentId(student.id)}
+                                        title={t.students.viewProfileBtn}
                                       className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 min-w-0 text-start transition-colors cursor-pointer ${
                                         status === 'paid'
                                           ? 'border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50'
@@ -731,9 +732,11 @@ export const StudentManagerView: React.FC = () => {
                                         dir="auto"
                                         className="text-sm font-semibold text-slate-900 truncate max-w-[60%] text-right"
                                       >
-                                        {student.name}
-                                      </span>
-                                    </button>
+                                          {student.name}
+                                        </span>
+                                      </button>
+                                      <WhatsAppButton phone={student.phone} name={student.name} />
+                                    </div>
                                   );
                                 })}
                               </div>
@@ -906,12 +909,15 @@ export const StudentManagerView: React.FC = () => {
 
                           {/* Name */}
                           <td className="py-2.5 px-4 min-w-0">
-                            <span
-                              dir="auto"
-                              className="block w-full text-sm font-semibold text-slate-900 truncate text-right"
-                            >
-                              {student.name}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span
+                                dir="auto"
+                                className="flex-1 text-sm font-semibold text-slate-900 truncate text-right"
+                              >
+                                {student.name}
+                              </span>
+                              <WhatsAppButton phone={student.phone} name={student.name} />
+                            </div>
                           </td>
                         </tr>
                       );

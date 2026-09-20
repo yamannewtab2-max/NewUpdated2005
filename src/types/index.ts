@@ -31,6 +31,7 @@ export interface Student {
   level?: string; // e.g. "Level 1", "Level 2", "Level 3", "Level 4"
   mahjaId?: string | null; // ID of the Mahja (or null/undefined if unassigned)
   roomId?: string | null; // ID of the Room inside Mahja (or null/undefined if unassigned)
+  phone?: string; // WhatsApp / phone number, any local or international format
   studentGroupId?: string | null; // backward compatibility
   createdAt: string;
   notes?: string;

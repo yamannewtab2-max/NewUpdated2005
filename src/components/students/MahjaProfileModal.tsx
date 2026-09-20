@@ -5,6 +5,7 @@ import { Button } from '../common/Button';
 import { currentMonthKey, monthLabel } from '../../utils/months';
 import { summarizeMonth } from '../../utils/monthlyPayments';
 import { CalendarDays, Users, CheckCircle2, Clock, Wallet, ArrowLeft } from 'lucide-react';
+import { WhatsAppButton } from '../common/WhatsAppButton';
 
 interface MahjaProfileModalProps {
   mahjaId: string | null;
@@ -142,6 +143,7 @@ export const MahjaProfileModal: React.FC<MahjaProfileModalProps> = ({ mahjaId, o
                       >
                         {student.name}
                       </span>
+                      <WhatsAppButton phone={student.phone} name={student.name} amount={amount} />
                     </div>
                   ))}
                 </div>

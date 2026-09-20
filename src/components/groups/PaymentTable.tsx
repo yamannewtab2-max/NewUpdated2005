@@ -4,6 +4,7 @@ import { Student } from '../../types';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { StudentProfileModal } from '../students/StudentProfileModal';
 import { CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { WhatsAppButton } from '../common/WhatsAppButton';
 import { currentMonthKey } from '../../utils/months';
 
 interface PaymentTableProps {
@@ -136,6 +137,8 @@ export const PaymentTable: React.FC<PaymentTableProps> = ({ groupId, studentIds 
               >
                 {student.name}
               </button>
+
+              <WhatsAppButton phone={student.phone} name={student.name} />
             </div>
           );
         })}

@@ -47,6 +47,7 @@ interface AppContextType {
   // Student Actions
   addStudent: (data: {
     name: string;
+    phone?: string;
     level?: string;
     mahjaId?: string | null;
     roomId?: string | null;
@@ -57,6 +58,7 @@ interface AppContextType {
     id: string,
     data: {
       name: string;
+      phone?: string;
       level?: string;
       mahjaId?: string | null;
       roomId?: string | null;
@@ -593,6 +595,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStudent = useCallback(
     (data: {
       name: string;
+      phone?: string;
       level?: string;
       mahjaId?: string | null;
       roomId?: string | null;
@@ -602,6 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newStudent: Student = {
         id: `student-${Date.now()}`,
         name: data.name.trim(),
+        phone: data.phone?.trim() || undefined,
         level: data.level?.trim() || 'Level 1',
         mahjaId: data.mahjaId || null,
         roomId: data.roomId || null,
@@ -625,6 +629,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: string,
       data: {
         name: string;
+        phone?: string;
         level?: string;
         mahjaId?: string | null;
         roomId?: string | null;
@@ -638,6 +643,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? {
                 ...s,
                 name: data.name.trim(),
+                phone: data.phone !== undefined ? data.phone.trim() || undefined : s.phone,
                 level: data.level !== undefined ? data.level.trim() : s.level,
                 mahjaId: data.mahjaId !== undefined ? data.mahjaId : s.mahjaId,
                 roomId: data.roomId !== undefined ? data.roomId : s.roomId,

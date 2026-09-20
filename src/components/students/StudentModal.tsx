@@ -4,7 +4,7 @@ import { Student } from '../../types';
 import { Modal } from '../common/Modal';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
-import { User, Award, Building2, DoorOpen } from 'lucide-react';
+import { User, Award, Building2, DoorOpen, Phone } from 'lucide-react';
 
 interface StudentModalProps {
   isOpen: boolean;
@@ -33,6 +33,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
   const [mahjaId, setMahjaId] = useState<string>('');
   const [roomId, setRoomId] = useState<string>('');
   const [errorName, setErrorName] = useState('');
+  const [phone, setPhone] = useState('');
 
   // Available rooms for selected Mahja
   const availableRooms = React.useMemo(() => {
@@ -43,6 +44,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
   useEffect(() => {
     if (studentToEdit) {
       setName(studentToEdit.name);
+      setPhone(studentToEdit.phone || '');
       const studentLevel = studentToEdit.level || 'Level 1';
       if (DEFAULT_LEVELS.includes(studentLevel)) {
         setLevel(studentLevel);
@@ -57,6 +59,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
       setRoomId(studentToEdit.roomId || '');
     } else {
       setName('');
+      setPhone('');
       setLevel('Level 1');
       setIsCustomLevel(false);
       setCustomLevel('');
@@ -95,6 +98,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
     if (studentToEdit) {
       updateStudent(studentToEdit.id, {
         name,
+        phone: phone.trim() || undefined,
         level: chosenLevel,
         mahjaId: chosenMahjaId,
         roomId: chosenRoomId,
@@ -102,6 +106,7 @@ export const StudentModal: React.FC<StudentModalProps> = ({
     } else {
       addStudent({
         name,
+        phone: phone.trim() || undefined,
         level: chosenLevel,
         mahjaId: chosenMahjaId,
         roomId: chosenRoomId,
@@ -128,6 +133,18 @@ export const StudentModal: React.FC<StudentModalProps> = ({
           error={errorName}
           leftIcon={<User className="w-4 h-4" />}
           autoFocus
+        />
+
+        {/* Phone / WhatsApp */}
+        <Input
+          type="tel"
+          inputMode="tel"
+          dir="ltr"
+          label={t.students.phoneLabel}
+          placeholder={t.students.phonePlaceholder}
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          leftIcon={<Phone className="w-4 h-4" />}
         />
 
         {/* Level / Ranking */}

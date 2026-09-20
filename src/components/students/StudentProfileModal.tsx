@@ -22,6 +22,8 @@ import {
   UserX,
   Trash2,
 } from 'lucide-react';
+import { WhatsAppButton } from '../common/WhatsAppButton';
+import { displayPhone } from '../../utils/whatsapp';
 
 interface StudentProfileModalProps {
   student: Student | null;
@@ -237,7 +239,17 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               {levelNumber(student.level)}
             </div>
             <div className="min-w-0">
-              <div dir="auto" className="text-base font-bold text-slate-900 break-words">{student.name}</div>
+              <div className="flex items-center gap-2 min-w-0">
+                <div dir="auto" className="text-base font-bold text-slate-900 break-words min-w-0">
+                  {student.name}
+                </div>
+                <WhatsAppButton phone={student.phone} name={student.name} size="md" />
+              </div>
+              {student.phone && (
+                <div dir="ltr" className="text-[11px] text-slate-500 font-mono mt-0.5">
+                  {displayPhone(student.phone)}
+                </div>
+              )}
               <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-slate-500">
                 {student.level && (
                   <span
