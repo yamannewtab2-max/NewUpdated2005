@@ -1,38 +1,57 @@
 /** Level helpers shared by the student views. */
 
 /**
- * Levels are stored as strings ("Level 3"), but data written by earlier builds
- * can hold a bare number (3). Never call .match on the raw value — coerce first,
- * otherwise one student with a numeric level crashes the whole view.
+ * Levels are stored as strings ("Kelas 3"), but data written by earlier builds can
+ * hold a bare number (3) or the older "Level 3" wording. Never call .match on the raw
+ * value — coerce first, otherwise one student with a numeric level crashes the view.
  */
+
+/** The preparatory intake — printed as "ت" in the dormitory roster, i.e. level 0. */
+export const LEVEL_TAMHIDI = 'Kelas Tamhidi';
+
+/** The levels a student can be in, in order. */
+export const levelLabels = (): string[] => [
+  LEVEL_TAMHIDI,
+  'Kelas 1',
+  'Kelas 2',
+  'Kelas 3',
+  'Kelas 4',
+];
+
 const rawLevel = (level?: string | number | null): string => {
   if (level === null || level === undefined) return '';
   return String(level).trim();
 };
 
-/** "Level 3" / 3 / "3" -> "3"; missing or unknown -> "–" */
+/** "Kelas 3" / "Level 3" / 3 / "3" -> "3"; "Kelas Tamhidi" -> "0"; missing -> "–" */
 export const levelNumber = (level?: string | number | null): string => {
   const raw = rawLevel(level);
   if (!raw) return '–';
   const match = raw.match(/(\d+)/);
-  return match ? match[1] : '–';
+  if (match) return match[1];
+  if (/tamhidi|تمهيدي/i.test(raw)) return '0';
+  return '–';
 };
 
-/** Normalise any stored level into the canonical "Level N" string. */
-export const normalizeLevel = (level?: string | number | null): string | undefined => {
-  const num = levelNumber(level);
-  if (num === '–') {
-    const raw = rawLevel(level);
-    return raw ? raw : undefined;
-  }
-  return `Level ${num}`;
+/** The canonical label of any stored level value. */
+export const levelLabel = (level?: string | number | null): string | undefined => {
+  const raw = rawLevel(level);
+  if (!raw) return undefined;
+  const num = levelNumber(raw);
+  if (num === '0') return LEVEL_TAMHIDI;
+  if (num !== '–') return `Kelas ${num}`;
+  return raw; // a custom label the user typed
 };
 
-/** Badge colour classes for a level — accepts "Level 3" or the bare number 3. */
+/** Normalise any stored level into its canonical label ("Level 3" -> "Kelas 3"). */
+export const normalizeLevel = (level?: string | number | null): string | undefined =>
+  levelLabel(level);
+
+/** Badge colour classes for a level — accepts "Kelas 3", "Level 3" or the bare number 3. */
 export const levelBadgeColor = (level?: string | number | null): string => {
   switch (levelNumber(level)) {
     case '0':
-      // the new intake — printed as "ت" in the dormitory roster
+      // the Tamhidi intake — printed as "ت" in the dormitory roster
       return 'bg-indigo-50 text-indigo-700 border-indigo-200';
     case '1':
       return 'bg-blue-50 text-blue-700 border-blue-200';

@@ -8,7 +8,7 @@ import { AddStudentsToRoomModal } from './AddStudentsToRoomModal';
 import { StudentProfileModal } from './StudentProfileModal';
 import { MahjaProfileModal } from './MahjaProfileModal';
 import { WhatsAppButton } from '../common/WhatsAppButton';
-import { levelNumber, levelBadgeColor } from '../../utils/level';
+import { levelNumber, levelBadgeColor, levelLabels } from '../../utils/level';
 import { currentMonthKey } from '../../utils/months';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Button } from '../common/Button';
@@ -851,11 +851,11 @@ export const StudentManagerView: React.FC = () => {
                 className="text-xs py-2 px-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-600 text-slate-700 font-medium cursor-pointer shadow-2xs"
               >
                 <option value="all">All Levels</option>
-                <option value="Level 1">Level 1</option>
-                <option value="Level 2">Level 2</option>
-                <option value="Level 3">Level 3</option>
-                <option value="Level 4">Level 4</option>
-                <option value="Level Unknown">Level Unknown</option>
+                {levelLabels().map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

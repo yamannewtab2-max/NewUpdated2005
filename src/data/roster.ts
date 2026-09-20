@@ -7,6 +7,7 @@
  * Rooms listed in the PDF as "غرفة المشرف" (supervisor room) have no students.
  */
 import type { Mahja, Room, Student } from '../types';
+import { levelLabel } from '../utils/level';
 
 export interface RosterStudent {
   name: string;
@@ -376,7 +377,7 @@ export const buildRosterSeed = () => {
         students.push({
           id: `student-${m.mahja}-${r.room}-${i + 1}`,
           name: s.name,
-          level: `Level ${s.level}`,
+          level: levelLabel(s.level) as string,
           mahjaId: mahjaId,
           roomId: roomId,
           createdAt: now,

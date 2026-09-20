@@ -5,6 +5,7 @@ import { Modal } from '../common/Modal';
 import { Input } from '../common/Input';
 import { Button } from '../common/Button';
 import { User, Award, Building2, DoorOpen, Phone } from 'lucide-react';
+import { levelLabels } from '../../utils/level';
 
 interface StudentModalProps {
   isOpen: boolean;
@@ -15,7 +16,7 @@ interface StudentModalProps {
   initialStudentGroupId?: string | null;
 }
 
-const DEFAULT_LEVELS = ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level Unknown'];
+const DEFAULT_LEVELS = levelLabels();
 
 export const StudentModal: React.FC<StudentModalProps> = ({
   isOpen,
