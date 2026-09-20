@@ -9,3 +9,4 @@ coverage/
 
 # local live-preview config (dev server + tunnel only, not part of the app)
 vite.config.tunnel.ts
+.vercel
