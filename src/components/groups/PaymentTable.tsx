@@ -138,7 +138,7 @@ export const PaymentTable: React.FC<PaymentTableProps> = ({ groupId, studentIds 
                 {student.name}
               </button>
 
-              <WhatsAppButton phone={student.phone} name={student.name} />
+              <WhatsAppButton student={student} />
             </div>
           );
         })}

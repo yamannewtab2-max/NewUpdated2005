@@ -735,7 +735,7 @@ export const StudentManagerView: React.FC = () => {
                                           {student.name}
                                         </span>
                                       </button>
-                                      <WhatsAppButton phone={student.phone} name={student.name} />
+                                      <WhatsAppButton student={student} />
                                     </div>
                                   );
                                 })}
@@ -916,7 +916,7 @@ export const StudentManagerView: React.FC = () => {
                               >
                                 {student.name}
                               </span>
-                              <WhatsAppButton phone={student.phone} name={student.name} />
+                              <WhatsAppButton student={student} />
                             </div>
                           </td>
                         </tr>

@@ -1,13 +1,12 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { whatsAppLink } from '../../utils/whatsapp';
+import { PAYMENT_ACCOUNT } from '../../config/payment';
+import type { Student } from '../../types';
 
 interface WhatsAppButtonProps {
-  /** Student's saved phone number (optional — without it WhatsApp opens a contact picker). */
-  phone?: string | null;
-  /** Student name, used inside the pre-filled message. */
-  name: string;
-  /** Optional amount to mention in the message. */
+  student: Student;
+  /** Override the amount shown (by default it is what the student still owes). */
   amount?: number;
   /** Icon size, Tailwind classes. */
   size?: 'sm' | 'md';
@@ -15,24 +14,26 @@ interface WhatsAppButtonProps {
 }
 
 /**
- * WhatsApp glyph. Clicking it opens wa.me in a new tab with a pre-filled message.
+ * WhatsApp glyph. Clicking it opens wa.me in a new tab with a pre-filled reminder:
+ * greeting + name, the amount still unpaid, and the account to pay into.
  * It is an <a>, so it works from list rows without triggering the row's own click.
  */
 export const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({
-  phone,
-  name,
+  student,
   amount,
   size = 'sm',
   className = '',
 }) => {
-  const { t, formatMoney } = useApp();
+  const { t, formatMoney, getStudentUnpaidAmount } = useApp();
 
-  let message = t.students.waMessage.replace('{name}', name);
-  if (amount && amount > 0) {
-    message += ' ' + t.students.waMessageAmount.replace('{amount}', formatMoney(amount));
-  }
+  const unpaid = amount !== undefined ? amount : getStudentUnpaidAmount(student.id);
 
-  const href = whatsAppLink(phone, message);
+  const lines = [t.students.waGreeting.replace('{name}', student.name)];
+  if (unpaid > 0) lines.push(t.students.waUnpaid.replace('{amount}', formatMoney(unpaid)));
+  lines.push(t.students.waPayTo, PAYMENT_ACCOUNT.number, PAYMENT_ACCOUNT.bank, PAYMENT_ACCOUNT.holder);
+  const message = lines.join('\n');
+
+  const href = whatsAppLink(student.phone, message);
   const box = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
   const icon = size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4';
 
@@ -41,7 +42,7 @@ export const WhatsAppButton: React.FC<WhatsAppButtonProps> = ({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      title={phone ? t.students.whatsappBtn : t.students.whatsappNoNumber}
+      title={student.phone ? t.students.whatsappBtn : t.students.whatsappNoNumber}
       aria-label={t.students.whatsappBtn}
       onClick={(e) => e.stopPropagation()}
       className={`shrink-0 inline-flex items-center justify-center rounded-full text-emerald-600 hover:text-white hover:bg-emerald-500 transition-colors cursor-pointer ${box} ${className}`}

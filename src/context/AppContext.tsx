@@ -21,6 +21,7 @@ import { buildRosterSeed } from '../data/roster';
 import { translations } from '../i18n/translations';
 import { monthStatus } from '../utils/monthlyPayments';
 import { normalizeLevel } from '../utils/level';
+import { currentMonthKey } from '../utils/months';
 
 interface AppContextType {
   // State
@@ -117,6 +118,8 @@ interface AppContextType {
   monthlyDues: Record<string, number>;
   /** Due for a student: explicit monthly due, else the sum of their tracking-group amounts. */
   suggestedMonthlyDue: (studentId: string) => number;
+  /** What a student still owes — used for the WhatsApp reminder. */
+  getStudentUnpaidAmount: (studentId: string) => number;
   setStudentMonthlyDue: (studentId: string, amount: number) => void;
   /** Record (or overwrite) the amount paid by a student for a given 'YYYY-MM'. */
   recordMonthlyPayment: (
@@ -1438,6 +1441,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [monthlyDues, groups]
   );
 
+  /**
+   * What a student still owes: the unpaid amounts of the tracking lists they are in.
+   * If they are in no list, this month's monthly due is used instead, so the reminder
+   * always names a real figure.
+   */
+  const getStudentUnpaidAmount = useCallback(
+    (studentId: string): number => {
+      const owedFromLists = payments
+        .filter((r) => r.studentId === studentId && r.status !== 'paid')
+        .reduce(
+          (sum, r) => sum + Math.max(0, (Number(r.requiredAmount) || 0) - (Number(r.paidAmount) || 0)),
+          0
+        );
+      if (owedFromLists > 0) return owedFromLists;
+
+      const month = monthlyPayments.find((p) => p.studentId === studentId && p.month === currentMonthKey());
+      if (month?.status === 'paid') return 0;
+      const due = month?.amountDue ?? monthlyDues[studentId] ?? suggestedMonthlyDue(studentId);
+      const paid = Number(month?.amountPaid) || 0;
+      return Math.max(0, (Number(due) || 0) - paid);
+    },
+    [payments, monthlyPayments, monthlyDues, suggestedMonthlyDue]
+  );
+
   const recordMonthlyPayment = useCallback(
     (
       studentId: string,
@@ -1587,6 +1614,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         monthlyPayments,
         monthlyDues,
         suggestedMonthlyDue,
+        getStudentUnpaidAmount,
         setStudentMonthlyDue,
         recordMonthlyPayment,
         markMonthPaid,

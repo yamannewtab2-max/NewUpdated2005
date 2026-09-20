@@ -143,7 +143,7 @@ export const MahjaProfileModal: React.FC<MahjaProfileModalProps> = ({ mahjaId, o
                       >
                         {student.name}
                       </span>
-                      <WhatsAppButton phone={student.phone} name={student.name} amount={amount} />
+                      <WhatsAppButton student={student} />
                     </div>
                   ))}
                 </div>

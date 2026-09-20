@@ -210,8 +210,9 @@ export const translations = {
       phonePlaceholder: 'e.g. 0812 3456 7890',
       whatsappBtn: 'Send a WhatsApp message',
       whatsappNoNumber: 'No number saved yet — WhatsApp will ask who to send it to',
-      waMessage: 'Assalamu alaikum {name},',
-      waMessageAmount: 'this is a reminder about your monthly payment of {amount}.',
+      waGreeting: 'Assalamu alaikum {name},',
+      waUnpaid: 'Unpaid amount: {amount}',
+      waPayTo: 'You can pay to:',
     },
     groups: {
       title: 'Tracking Groups',
@@ -599,8 +600,9 @@ export const translations = {
       phonePlaceholder: 'mis. 0812 3456 7890',
       whatsappBtn: 'Kirim pesan WhatsApp',
       whatsappNoNumber: 'Nomor belum ada — WhatsApp akan menanyakan tujuan',
-      waMessage: "Assalamu'alaikum {name},",
-      waMessageAmount: 'ini pengingat pembayaran bulanan Anda sebesar {amount}.',
+      waGreeting: "Assalamu'alaikum {name},",
+      waUnpaid: 'Jumlah belum dibayar: {amount}',
+      waPayTo: 'Pembayaran dapat dikirim ke:',
     },
     groups: {
       title: 'Grup Pelacakan',

@@ -243,7 +243,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                 <div dir="auto" className="text-base font-bold text-slate-900 break-words min-w-0">
                   {student.name}
                 </div>
-                <WhatsAppButton phone={student.phone} name={student.name} size="md" />
+                <WhatsAppButton student={student} size="md" />
               </div>
               {student.phone && (
                 <div dir="ltr" className="text-[11px] text-slate-500 font-mono mt-0.5">
