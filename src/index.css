@@ -29,6 +29,31 @@
 @layer base {
   body {
     font-family: var(--font-sans);
+    background-color: #f8fafc; /* slate-50, the base the photo sits on */
+  }
+
+  /*
+   * Campus photo as a backdrop: fixed to the viewport, washed out with a light
+   * overlay so it stays decoration — every card, label and number keeps its contrast.
+   */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      linear-gradient(
+        to bottom,
+        rgba(248, 250, 252, 0.66) 0%,
+        rgba(248, 250, 252, 0.76) 45%,
+        rgba(248, 250, 252, 0.88) 100%
+      ),
+      url('/background.jpg');
+    background-size: cover, cover;
+    background-position: center, center 40%;
+    background-repeat: no-repeat, no-repeat;
+    background-attachment: fixed, fixed;
   }
 
   /* Amounts, numbers and code stay monospaced so digits line up. */

@@ -31,7 +31,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row text-slate-900 font-sans selection:bg-indigo-500/20 selection:text-indigo-900">
+    <div className="min-h-screen bg-transparent flex flex-col md:flex-row text-slate-900 font-sans selection:bg-indigo-500/20 selection:text-indigo-900">
       {/* Sidebar */}
       <Sidebar
         isMobileOpen={isMobileNavOpen}
