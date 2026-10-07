@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { Language, Currency } from '../../types';
 import { Button } from '../common/Button';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { GoogleMark } from '../common/GoogleMark';
 import {
   Globe,
   DollarSign,
@@ -10,6 +11,8 @@ import {
   Sparkles,
   CheckCircle2,
   ShieldCheck,
+  Upload,
+  CloudUpload,
 } from 'lucide-react';
 
 export const SettingsView: React.FC = () => {
@@ -20,9 +23,36 @@ export const SettingsView: React.FC = () => {
     currency,
     setCurrency,
     resetToMockData,
+    cloudStatus,
+    authEmail,
+    signIn,
+    signOut,
+    pushLocalToCloud,
   } = useApp();
 
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
+  const cloudLabel =
+    cloudStatus === 'downloaded'
+      ? t.settings.cloudDownloaded
+      : cloudStatus === 'seeded'
+        ? t.settings.cloudSeeded
+        : cloudStatus === 'signedOut'
+          ? t.settings.statusSignedOut
+          : cloudStatus === 'denied'
+            ? t.settings.statusDenied
+            : cloudStatus === 'offline'
+              ? t.settings.cloudOffline
+              : t.settings.cloudLoading;
+
+  const cloudDot =
+    cloudStatus === 'downloaded' || cloudStatus === 'seeded'
+      ? 'bg-emerald-500'
+      : cloudStatus === 'offline' || cloudStatus === 'denied'
+        ? 'bg-rose-500'
+        : cloudStatus === 'signedOut'
+          ? 'bg-slate-300'
+          : 'bg-amber-400 animate-pulse';
 
   const languages: { id: Language; label: string; sub: string; flag: string }[] = [
     {
@@ -176,6 +206,56 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Firebase Backup */}
+      <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-xl bg-sky-50 text-sky-600">
+            <CloudUpload className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{t.settings.cloudHeading}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{t.settings.cloudDesc}</p>
+          </div>
+        </div>
+
+        <div className="pt-2 flex items-center justify-between flex-wrap gap-3 border-t border-slate-100">
+          <span className="flex items-center gap-2 text-xs font-semibold text-slate-700 min-w-0">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${cloudDot}`} />
+            <span className="truncate">
+              {authEmail ? `${t.settings.signedInAs} ${authEmail}` : cloudLabel}
+            </span>
+          </span>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {authEmail && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={cloudStatus === 'loading'}
+                onClick={() => void pushLocalToCloud()}
+                leftIcon={<Upload className="w-3.5 h-3.5" />}
+              >
+                {t.settings.cloudUploadBtn}
+              </Button>
+            )}
+            {authEmail ? (
+              <Button variant="ghost" size="sm" onClick={() => void signOut()}>
+                {t.settings.signOut}
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void signIn()}
+                leftIcon={<GoogleMark className="w-4 h-4" />}
+              >
+                {t.settings.signIn}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* About Box */}
       <div className="p-5 rounded-2xl bg-slate-900 text-slate-300 space-y-2">
         <div className="flex items-center gap-2 text-white">
@@ -191,7 +271,7 @@ export const SettingsView: React.FC = () => {
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Production-ready UI architecture
           </span>
           <span>•</span>
-          <span>Ready for Firestore / SQL integration</span>
+          <span>Firestore backup enabled</span>
         </div>
       </div>
 

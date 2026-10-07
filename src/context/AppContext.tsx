@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Student,
   Mahja,
@@ -22,6 +22,8 @@ import { translations } from '../i18n/translations';
 import { monthStatus } from '../utils/monthlyPayments';
 import { normalizeLevel } from '../utils/level';
 import { currentMonthKey } from '../utils/months';
+import { bootstrapCloud, pushCloudState, queueCloudWrite, type CloudStatus, type SyncedKey } from '../lib/cloudSync';
+import { signInWithGoogle, signOutUser, watchAuth } from '../lib/auth';
 
 interface AppContextType {
   // State
@@ -160,6 +162,17 @@ interface AppContextType {
 
   // System
   resetToMockData: () => void;
+  /** Where the Firebase copy stands: 'downloaded' (cloud is the source), 'seeded'
+   *  (this device pushed its data up), 'signedOut' / 'denied' (no access),
+   *  'offline' (no cloud reachable), 'loading'. */
+  cloudStatus: CloudStatus;
+  /** The allowed Google account currently signed in, or null. */
+  authEmail: string | null;
+  /** Open the Google account chooser (only the allowed accounts get through). */
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
+  /** Force-upload this device's data, replacing the cloud copy. */
+  pushLocalToCloud: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -533,6 +546,123 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Failed saving monthly dues to localStorage', e);
     }
   }, [monthlyDues]);
+
+  // ---------------------------------------------------------------------------
+  // Firebase / Firestore sync (signed in with Google)
+  // ---------------------------------------------------------------------------
+  // localStorage stays the app's own persistence; Firestore is a second copy so
+  // the real roster and the payment history survive a cleared browser, a new
+  // phone, or reinstalling. Only the allowed Google accounts can read or write it
+  // (see the Firestore rules), so the sync starts when a user signs in — and the
+  // app stays fully usable from localStorage while signed out.
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus>('loading');
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const cloudBooted = useRef(false);
+  // Kept current on every render so a sign-in uploads what this device holds *now*.
+  const localSnapshot = useRef<Record<string, unknown>>({});
+  useEffect(() => {
+    localSnapshot.current = {
+      mahjas,
+      rooms,
+      students,
+      studentGroups,
+      groups,
+      payments,
+      monthlyPayments,
+      monthlyDues,
+      paymentEntries,
+      notePresets,
+    };
+  });
+
+  useEffect(() => {
+    let stopped = false;
+    let unsubscribe: (() => void) | undefined;
+
+    // No "cancelled" guard on the bootstrap itself: React StrictMode mounts effects
+    // twice in development, and swallowing the second run's result left the app
+    // stuck on 'loading' forever. The ref makes the cloud round-trip happen once
+    // per signed-in session, so applying its result unconditionally is correct.
+    const runBootstrap = () => {
+      cloudBooted.current = true;
+      setCloudStatus('loading');
+      void bootstrapCloud(localSnapshot.current)
+        .then(({ status, applied }) => {
+          const has = (key: SyncedKey) => applied[key] !== undefined;
+          const cloudStudents = applied.students;
+          if (Array.isArray(cloudStudents) && cloudStudents.length > 0) {
+            setStudents((cloudStudents as Student[]).map((s) => ({ ...s, level: normalizeLevel(s.level) })));
+          }
+          if (has('mahjas')) setMahjas(applied.mahjas as Mahja[]);
+          if (has('rooms')) setRooms(applied.rooms as Room[]);
+          if (has('studentGroups')) setStudentGroups(applied.studentGroups as StudentGroup[]);
+          if (has('groups')) setGroups(applied.groups as TrackingGroup[]);
+          if (has('payments')) setPayments(applied.payments as PaymentRecord[]);
+          if (has('monthlyPayments')) setMonthlyPayments(applied.monthlyPayments as MonthlyPayment[]);
+          if (has('monthlyDues')) setMonthlyDues(applied.monthlyDues as Record<string, number>);
+          if (has('paymentEntries')) setPaymentEntries(applied.paymentEntries as PaymentEntry[]);
+          if (has('notePresets')) setNotePresets(applied.notePresets as string[]);
+          setCloudStatus(status);
+        })
+        .catch((e) => {
+          // Never leave the UI on "checking…": a rejected bootstrap means no cloud.
+          console.warn('[cloud] bootstrap failed', e);
+          setCloudStatus('offline');
+        });
+    };
+
+    void watchAuth((user) => {
+      if (stopped) return;
+      if (!user) {
+        cloudBooted.current = false;
+        setAuthEmail(null);
+        setCloudStatus('signedOut');
+        return;
+      }
+      if (!user.allowed) {
+        setAuthEmail(null);
+        setCloudStatus('denied');
+        return;
+      }
+      setAuthEmail(user.email);
+      if (!cloudBooted.current) runBootstrap();
+    }).then((un) => {
+      unsubscribe = un;
+      if (stopped) un();
+    });
+
+    return () => {
+      stopped = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  // Push every change up — debounced and de-duplicated inside queueCloudWrite.
+  useEffect(() => {
+    if (cloudStatus !== 'downloaded' && cloudStatus !== 'seeded') return;
+    queueCloudWrite('mahjas', mahjas);
+    queueCloudWrite('rooms', rooms);
+    queueCloudWrite('students', students);
+    queueCloudWrite('studentGroups', studentGroups);
+    queueCloudWrite('groups', groups);
+    queueCloudWrite('payments', payments);
+    queueCloudWrite('monthlyPayments', monthlyPayments);
+    queueCloudWrite('monthlyDues', monthlyDues);
+    queueCloudWrite('paymentEntries', paymentEntries);
+    queueCloudWrite('notePresets', notePresets);
+  }, [
+    cloudStatus,
+    mahjas,
+    rooms,
+    students,
+    studentGroups,
+    groups,
+    payments,
+    monthlyPayments,
+    monthlyDues,
+    paymentEntries,
+    notePresets,
+  ]);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
@@ -1430,6 +1560,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [t, addToast]);
 
+  /**
+   * Manual escape hatch: replace the Firebase copy with what this device holds.
+   * The first device to open an empty cloud seeds it automatically; this exists
+   * for the case where the cloud already holds an older copy (or was seeded from
+   * a fresh browser) and *this* device is the one with the real data.
+   */
+  const pushLocalToCloud = useCallback(async () => {
+    if (!authEmail) {
+      addToast({ type: 'info', title: t.settings.signInRequired });
+      return;
+    }
+    setCloudStatus('loading');
+    const status = await pushCloudState({
+      mahjas,
+      rooms,
+      students,
+      studentGroups,
+      groups,
+      payments,
+      monthlyPayments,
+      monthlyDues,
+      paymentEntries,
+      notePresets,
+    });
+    setCloudStatus(status);
+    addToast({
+      type: status === 'offline' ? 'error' : 'success',
+      title: status === 'offline' ? t.settings.cloudUploadFailed : t.settings.cloudUploaded,
+    });
+  }, [
+    mahjas,
+    rooms,
+    students,
+    studentGroups,
+    groups,
+    payments,
+    monthlyPayments,
+    monthlyDues,
+    paymentEntries,
+    notePresets,
+    authEmail,
+    t,
+    addToast,
+  ]);
+
+  /** Google sign-in; the account chooser does the rest. */
+  const signIn = useCallback(async () => {
+    try {
+      const user = await signInWithGoogle();
+      // null = the browser left for a redirect sign-in; nothing more to say here.
+      if (user) addToast({ type: 'success', title: t.settings.signInSuccess });
+    } catch (e) {
+      const code = String((e as { code?: string })?.code || '');
+      const notAllowed = String((e as Error)?.message || '').includes('not-allowed');
+      // A closed popup is a deliberate cancel, not an error worth shouting about.
+      if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) return;
+      console.warn('[auth] sign-in failed', e);
+      addToast({
+        type: 'error',
+        title: notAllowed ? t.settings.signInDenied : t.settings.signInFailed,
+      });
+    }
+  }, [t, addToast]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await signOutUser();
+      addToast({ type: 'info', title: t.settings.signOutSuccess });
+    } catch (e) {
+      console.warn('[auth] sign-out failed', e);
+      addToast({ type: 'error', title: t.settings.signInFailed });
+    }
+  }, [t, addToast]);
+
   // ---- Monthly payments: every student owes a fee for every month ----
   const suggestedMonthlyDue = useCallback(
     (studentId: string): number => {
@@ -1638,6 +1842,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToast,
         removeToast,
         resetToMockData,
+        cloudStatus,
+        authEmail,
+        signIn,
+        signOut,
+        pushLocalToCloud,
       }}
     >
       {children}

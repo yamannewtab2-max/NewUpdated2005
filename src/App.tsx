@@ -5,6 +5,7 @@ import { Header } from './components/layout/Header';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { GroupsView } from './components/groups/GroupsView';
 import { StudentManagerView } from './components/students/StudentManagerView';
+import { CalendarView } from './components/calendar/CalendarView';
 import { SettingsView } from './components/settings/SettingsView';
 import { ToastContainer } from './components/common/ToastContainer';
 import { GroupModal } from './components/groups/GroupModal';
@@ -23,6 +24,8 @@ const AppContent: React.FC = () => {
         return <GroupsView />;
       case 'students':
         return <StudentManagerView />;
+      case 'calendar':
+        return <CalendarView />;
       case 'settings':
         return <SettingsView />;
       default:

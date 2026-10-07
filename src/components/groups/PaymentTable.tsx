@@ -27,6 +27,7 @@ export const PaymentTable: React.FC<PaymentTableProps> = ({ groupId, studentIds 
     setGroupStudents,
     monthlyPayments,
     recordMonthlyPayment,
+    markMonthPaid,
     clearMonthlyPayment,
     suggestedMonthlyDue,
   } = useApp();
@@ -62,7 +63,10 @@ export const PaymentTable: React.FC<PaymentTableProps> = ({ groupId, studentIds 
       const amount = required > 0 ? required : suggestedMonthlyDue(studentId);
       // Settle the month with exactly what was paid here, so the profile shows Paid
       // even when the student's monthly due is a different (larger) number.
+      // The month always gets a dated record — including the no-rate case — or the
+      // Calendar cannot tell which month this payment belongs to.
       if (amount > 0) recordMonthlyPayment(studentId, currentKey, amount, undefined, amount);
+      else markMonthPaid(studentId, currentKey);
     }
   };
 

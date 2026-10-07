@@ -1,15 +1,18 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { ActiveView } from '../../types';
+import { GoogleMark } from '../common/GoogleMark';
 import {
   LayoutDashboard,
   Users,
   FolderTree,
+  CalendarDays,
   Settings,
   ChevronLeft,
   ChevronRight,
   Sparkles,
   Layers,
+  LogOut,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,7 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed,
   setIsCollapsed,
 }) => {
-  const { activeView, setActiveView, setSelectedGroupId, t, students, groups, language, setLanguage } = useApp();
+  const { activeView, setActiveView, setSelectedGroupId, t, students, groups, language, setLanguage, authEmail, signIn, signOut } = useApp();
 
   const navItems: { id: ActiveView; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
@@ -44,6 +47,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: t.nav.studentManager,
       icon: <Users className="w-5 h-5 shrink-0" />,
       badge: students.length,
+    },
+    {
+      id: 'calendar',
+      label: t.nav.calendar,
+      icon: <CalendarDays className="w-5 h-5 shrink-0" />,
     },
     {
       id: 'settings',
@@ -138,8 +146,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Footer / Quick Language Switch */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900/50">
+      {/* Footer: Firebase account + Quick Language Switch */}
+      <div className="p-3 border-t border-slate-800 bg-slate-900/50 space-y-2">
+        {/* Google sign-in lives in the menu, not floating over the app. */}
+        {authEmail ? (
+          <div className="flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 text-xs" title={authEmail}>
+            <GoogleMark className="w-4 h-4 shrink-0" />
+            {!isCollapsed && <span className="flex-1 truncate text-[11px] text-slate-300">{authEmail}</span>}
+            <button
+              onClick={() => void signOut()}
+              title={t.settings.signOut}
+              aria-label={t.settings.signOut}
+              className="p-1 rounded text-slate-400 hover:text-rose-300 hover:bg-slate-900/60"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => void signIn()}
+            title={t.settings.signIn}
+            className={`w-full flex items-center gap-2 p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-200 font-semibold ${
+              isCollapsed ? 'justify-center' : 'text-[11px]'
+            }`}
+          >
+            <GoogleMark className="w-4 h-4 shrink-0" />
+            {!isCollapsed && <span className="truncate">{t.settings.signIn}</span>}
+          </button>
+        )}
+
         {!isCollapsed ? (
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/60 text-xs">
             <div className="flex items-center gap-2 text-slate-400">

@@ -114,4 +114,4 @@ export interface Toast {
   message?: string;
 }
 
-export type ActiveView = 'dashboard' | 'students' | 'groups' | 'settings';
+export type ActiveView = 'dashboard' | 'students' | 'groups' | 'calendar' | 'settings';
